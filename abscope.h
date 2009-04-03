@@ -27,7 +27,6 @@
 // todo: get the std types in here.
 typedef int int32_t;
 
-
 #include "locinfo.h"
 #include "strs.h"
 
@@ -35,5 +34,6 @@ char* downcase(char *str);
 
 FILE *absfile_open_write(char *fn);
 FILE *absfile_open_read(char *fn);
+int match_ext(char *fn, char *ext);
 
 #endif //ABSCOPE_H

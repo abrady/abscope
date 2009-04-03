@@ -35,7 +35,8 @@
      STRUCT = 261,
      AUTO_COMMAND = 262,
      META_PARAM = 263,
-     TOK = 264
+     TOK = 264,
+     STR = 265
    };
 #endif
 /* Tokens.  */
@@ -46,6 +47,7 @@
 #define AUTO_COMMAND 262
 #define META_PARAM 263
 #define TOK 264
+#define STR 265
 
 
 
@@ -57,7 +59,7 @@ typedef union YYSTYPE {
      int num;
 } YYSTYPE;
 /* Line 1447 of yacc.c.  */
-#line 61 "c.tab.h"
+#line 63 "c.tab.h"
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 # define YYSTYPE_IS_TRIVIAL 1

@@ -37,7 +37,7 @@ void add_struct_decl(struct CParse *ctxt, char *struct_name);
 // *************************************************************************
 // invocation
 // *************************************************************************
-
+int c_ext(char *file);
 int c_process_file(struct CParse *cp, char *fn);
 int c_on_processing_finished(struct CParse *cp);
 

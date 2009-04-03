@@ -49,8 +49,8 @@ static void print_token_value (FILE *, int, YYSTYPE);
 %lex-param   {struct CParse *ctxt}
 %token<str> TYPEDEF EXTERN STATIC STRUCT AUTO_COMMAND
 %token<str> META_PARAM
-%token<str> TOK
-%type<str>  type_decl 
+%token<str> TOK STR
+%type<str>  type_decl str_literal
 %type<num>  struct_decl_or_def
 
 // %destructor { free( $$)  } string
@@ -82,17 +82,34 @@ unary_operator:
         | '!'
                 ;
 
+assignment_operator:
+                '='
+        |  '*='
+        |  '/='
+        |  '%='
+        |  '+='
+        |  '-='
+        |  '<<='
+        |  '>>='
+        |  '&='
+        |  '^='
+        |  '|='
+                ;
 ignored_stuff:
                 '{'
-                |       '}'
+        |       '}'
         |       ';'
         |       '['
         |       ']'
         |       '='
-        |       '-'
         |       '^'
+        |       ','
         |       unary_operator
+        |       str_literal
         |       TOK
+        |       EXTERN
+        |       STATIC
+        |       assignment_operator
         ;
 
 function_definition:
@@ -125,6 +142,11 @@ struct_decl:    TYPEDEF STRUCT TOK struct_decl_or_def { if($4) add_struct_decl(c
 
 autocmd_decl:   AUTO_COMMAND
         ;
+
+str_literal: 
+                STR
+        |       STR '\\' str_literal { char *tmp = realloc($1,strlen($1)+strlen($3)+1); $$ = strcat(tmp,$3); }
+        |       STR str_literal { char *tmp = realloc($1,strlen($1)+strlen($2)+1); $$ = strcat(tmp,$2); }
 
 %%  
 struct CParse *ctxt;
@@ -190,6 +212,16 @@ int yylex (struct CParse *ctxt)
             return yylex(ctxt);
         }
         ungetc(c, ctxt->fp);
+    }
+    else if(c == '"')
+    {
+        while((c=getc(ctxt->fp))!='"' && c != EOF)
+            *i++ = c;
+        *i = 0;
+        yylval.str = _strdup(tok);
+        if(c != '"')
+            ungetc(c,ctxt->fp);
+        return STR;
     }
 
     // parse the token

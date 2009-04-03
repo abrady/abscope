@@ -19,7 +19,7 @@ typedef struct DirScan
     int n_files;
 } DirScan;
 
-static int match_ext(char *fn, char *ext)
+int match_ext(char *fn, char *ext)
 {
     char *fne = strrchr(fn,'.');
     return fne && 0 == strcmp(fne+1,ext);
@@ -51,7 +51,7 @@ scan_dir(DirScan *d, const char *adir, BOOL recurse_dir)
             file = entry->d_name;
             if (recurse_dir && S_ISDIR(buf.st_mode) )
                 scan_dir(d, path, recurse_dir);
-            else if (match_ext(path,"c") && _access(path, R_OK) == 0)
+            else if (c_ext(path) && _access(path, R_OK) == 0)
                 strs_find_add_str(&d->files,&d->n_files,_strdup(path));
 		}
 		closedir(dirfile);
@@ -160,7 +160,7 @@ int main(int argc, char **argv)
         for(i = 0; i < dir_scan.n_files; ++i)
         {
             char *fn = dir_scan.files[i];
-            if(match_ext(fn,"c"))
+            if(c_ext(fn))
                 res += c_process_file(&cp,fn);
         }
         

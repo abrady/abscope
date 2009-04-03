@@ -79,3 +79,9 @@ int c_findstructs(CParse *cp, char *sn)
     }
     return 0;
 }
+
+int c_ext(char *file)
+{
+    return match_ext(file,"c")
+        || match_ext(file,"h");
+}
