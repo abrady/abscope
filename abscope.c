@@ -7,9 +7,9 @@
  *
  ***************************************************************************/
 #include "abscope.h"
+#include "dirent.h"
 #include "c_parse.h"
 #include "c.tab.h"
-#include "dirent.h"
 
 
 
@@ -65,6 +65,7 @@ static void usage(int argc, char**argv)
     printf("usage: %s <filename>\n",argv[0]);
     printf("processing options:\n"
            "-p\t\t: process the passed file\n"
+           "-T    : run tests"
         );
 }
 
@@ -110,6 +111,43 @@ FILE *absfile_open_read(char *fn)
     return fp;
 }
 
+#define TEST(COND) if(!(COND)) {printf(#COND "failed\n"); return -1;}
+static int test()
+{
+    int i;
+    DirScan dir_scan = {0};
+    CParse cp = {0};
+    static char *structs_to_find[] = {
+        "dirent",
+        "Foo",
+        "Bar",
+        "Baz",
+    };
+    static char *structs_not_to_find[] = {
+        "Cat", // typedef only
+    };
+
+    printf("TESTING\n");
+    printf("scanning ./test...");
+    scan_dir(&dir_scan,"./test",1);
+    printf("done.\n");
+
+    printf("found %i files:\n",dir_scan.n_files);
+    TEST(dir_scan.n_files == 3);
+    for(i = 0; i < dir_scan.n_files;++i)
+    {
+        int r;
+        printf("scanning %s",dir_scan.files[i]);
+        r = c_process_file(&cp,dir_scan.files[i]);
+        TEST(r>=0);
+    }
+
+    for(i = 0; i < DIMOF(structs_to_find); ++i)
+        TEST(0<=c_findstructs(&cp,structs_to_find[i]));
+    for(i = 0; i < DIMOF(structs_not_to_find); ++i)
+        TEST(0<=c_findstructs(&cp,structs_not_to_find[i]));
+    return 0;
+}
 
 int main(int argc, char **argv)
 {
@@ -147,6 +185,8 @@ int main(int argc, char **argv)
                 scan_dir(&dir_scan,argv[++i],1);
                 process = 1;
                 break;
+            case 'T':
+                return test();
             };
         }
         break;

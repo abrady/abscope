@@ -6,7 +6,9 @@
 call "c:\Program Files\Microsoft Visual Studio 8\VC\bin\vcvars32.bat"
 call "c:/Microsoft Visual Studio 8/VC/bin/vcvars32.bat"
 
-bison -v -pc_ -t -d c.y
+@REM -t --locations -v
+del c.tab.c c.tab.h c.output
+bison -pc_ c.y
 if NOT "%ERRORLEVEL%"=="0" goto error
 
 @REM /RTC{s,c,u} : stack frame runtime checking, convert checks, unininitialized checks

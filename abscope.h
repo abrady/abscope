@@ -30,6 +30,8 @@ typedef int int32_t;
 #include "locinfo.h"
 #include "strs.h"
 
+#define DIMOF(A) (sizeof(A)/sizeof(*(A)))
+
 char* downcase(char *str);
 
 FILE *absfile_open_write(char *fn);

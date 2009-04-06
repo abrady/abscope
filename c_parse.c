@@ -40,7 +40,7 @@ int c_process_file(struct CParse *cp, char *fn)
     if(!cp->fp)
     {
         printf("couldn't open file %s\n",cp->parse_file);
-        return 1;
+        return -1;
     }
     if(0 != (parse_res = c_parse(cp)))
     {
