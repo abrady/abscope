@@ -25,7 +25,7 @@ void add_locinfo(CParse *ctxt, LocInfo **li, int *n, char *tok)
     l->line = ctxt->parse_line;
 }
 
-void add_struct_decl(struct CParse *ctxt, char *struct_name) 
+void add_struct_decl(struct CParse *ctxt, char *struct_name)
 {
     add_locinfo(ctxt,&ctxt->structs,&ctxt->n_structs,struct_name);
 }
@@ -62,11 +62,8 @@ int c_on_processing_finished(struct CParse *cp)
 
 int c_load(struct CParse *cp)
 {
-    int res = 0;
-    absfile_read_locinfos("c_structs.abs",&cp->structs,&cp->n_structs);
-    return res;
+    return absfile_read_locinfos("c_structs.abs",&cp->structs,&cp->n_structs);
 }
-
 
 int c_findstructs(CParse *cp, char *sn)
 {

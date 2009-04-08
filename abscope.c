@@ -66,6 +66,10 @@ static void usage(int argc, char**argv)
     printf("processing options:\n"
            "-p\t\t: process the passed file\n"
            "-T    : run tests"
+           "-D    : parse in debug mode"
+#ifdef _DEBUG
+           "-Z    : wait for debugger attach"
+#endif
         );
 }
 
@@ -149,6 +153,13 @@ static int test()
     return 0;
 }
 
+typedef enum CQueryFlag
+{
+    CQueryFlag_None = 0,
+    CQueryFlag_Struct = 1<<1,
+    CQueryFlag_Func   = 2<<1,
+} CQueryFlag;
+
 int main(int argc, char **argv)
 {
     DirScan dir_scan = {0};
@@ -156,7 +167,8 @@ int main(int argc, char **argv)
     int i;
     struct CParse cp = {0};
     int process = 0;
-    char *find_struct = 0;
+    int c_query_flags = 0;
+    char *query_str = 0;
 
     if(argc < 2)
     {
@@ -166,11 +178,19 @@ int main(int argc, char **argv)
     for(i = 1; i < argc; ++i)
     {
         char *a = argv[i];
-        switch(*a){
+        switch(*a++){
         case '-':
         {
-            a++;
-            switch(*a){
+
+            switch(*a++){
+#ifdef _DEBUG
+            case 'Z':
+                fprintf(stderr,"waiting for debugger...");
+                while(!IsDebuggerPresent())
+                    Sleep(1);
+                fprintf(stderr,"done.\n");
+                break;
+#endif
             case 'D':
                 c_debug = 1;
                 break;
@@ -178,8 +198,17 @@ int main(int argc, char **argv)
                 strs_find_add_str(&dir_scan.files,&dir_scan.n_files,argv[++i]);
                 process = 1;
                 break;
-            case 's':
-                find_struct = argv[++i];
+            case 'Q':               // Query for something 
+                query_str = argv[++i];
+                switch(*a++)
+                {
+                case 's':
+                    c_query_flags |= CQueryFlag_Struct;
+                    break;
+                default:
+                    fprintf(stderr, "unknown query option %c in %s\n",*(a-1), argv[i]);
+                    return -1;
+                };
                 break;
             case 'R':
                 scan_dir(&dir_scan,argv[++i],1);
@@ -208,10 +237,11 @@ int main(int argc, char **argv)
         return res;
     }
     
-    c_load(&cp);
-    
-    if(find_struct) {
-        c_findstructs(&cp,find_struct);
+    if(c_load(&cp)<0)
+        return -1;    
+    if(c_query_flags) {
+        if(c_query_flags & CQueryFlag_Struct)
+            c_findstructs(&cp,query_str);
     }
     else if(interactive){
         int c = getchar();
@@ -224,6 +254,5 @@ int main(int argc, char **argv)
             c_findstructs(&cp,s);
         };
     }
-    printf("\ndone.");
     return 0;
 }

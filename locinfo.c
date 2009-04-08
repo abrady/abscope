@@ -31,12 +31,12 @@ int absfile_write_locinfos(char *fn, struct LocInfo *infos, int n_infos)
     n_strs = 0;
     for(i = 0; i < n_infos; ++i)
     {
-        FileLocInfo *f = finfos+i;
+        FileLocInfo *finfo = finfos+i;
         LocInfo *info = infos+i;
         
-        f->tok = strs_find_add_str(&strs,&n_strs,info->tok);
-        f->file = strs_find_add_str(&strs,&n_strs,info->file);        
-        f->line = info->line;
+        finfo->tok = strs_find_add_str(&strs,&n_strs,info->tok);
+        finfo->file = strs_find_add_str(&strs,&n_strs,info->file);        
+        finfo->line = info->line;
     }
     
     for(i = 0; i < n_strs; ++i)
@@ -63,6 +63,7 @@ int absfile_write_locinfos(char *fn, struct LocInfo *infos, int n_infos)
 
 int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos)
 {
+    int res = 0;
     int nread;
     char *p;
     char *strdata;
@@ -74,7 +75,10 @@ int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos)
     FileLocInfo *finfos = 0;
     
     if(!fp)
+    {
+        fprintf(stderr,"couldn't open file %s to read locinfos\n",fn);
         return -1;
+    }
     fread(&n_strs,sizeof(n_strs),1,fp);
     fread(&strdata_len,sizeof(strdata_len),1,fp);
     if(!n_strs || !strdata_len)
@@ -96,7 +100,8 @@ int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos)
         if(!pt)
         {
             fprintf(stderr,"couldn't advance to next string at element %i, previous string %s",i,p);
-            return -3;
+            res = -3;
+            goto cleanup;
         }
         p = pt + 1;
     }
@@ -104,14 +109,16 @@ int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos)
     // read the on-file location info
     fread(pn_infos,sizeof(*pn_infos),1,fp);
     finfos = malloc(sizeof(*finfos)*(*pn_infos));
-    nread  = fread(finfos,sizeof(*finfos),*pn_infos,fp);
+    nread  = fread(finfos,sizeof(*finfos),(*pn_infos),fp);
     if(nread != *pn_infos)
     {
         fprintf(stderr,"read %i infos, expected %i",nread,*pn_infos);
-        return -4;
+        res = -4;
+        goto cleanup;
+        
     }
     
-    *pinfos = realloc(*pinfos,sizeof(*pinfos)*(*pn_infos));
+    *pinfos = realloc(*pinfos,sizeof(**pinfos)*(*pn_infos));
     for(i = 0; i < *pn_infos; ++i)
     {
         FileLocInfo *finfo = finfos + i;
@@ -121,14 +128,15 @@ int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos)
         info->file = strs[finfo->file];
     }
     
-    free(strs);
+cleanup:
     free(finfos);
-    return 0;
+    free(strs);
+    return res;
 }
 
 int locinfo_vprintf(LocInfo *li,char *fmt,va_list args)
 {
-    printf("%s(%i): ", li->file, li->line);
+    printf("** [[file:%s::%i]] %s", li->file, li->line, "(context)");
     return vprintf(fmt,args);
 }
 

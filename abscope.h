@@ -23,6 +23,15 @@
 #define S_ISREG(B) ((B)&_S_IFREG)
 #define S_ISDIR(B) ((B)&_S_IFDIR)
 
+#ifdef _DEBUG 
+// http://msdn.microsoft.com/en-us/library/aa383745(VS.85).aspx
+#define WIN32_LEAN_AND_MEAN 
+#define _WIN32_WINNT 	0x0501
+#include <windows.h>
+//#include <winsock2.h>
+#include <winbase.h>  // for IsDebuggerPresent
+#endif
+
 
 // todo: get the std types in here.
 typedef int int32_t;
