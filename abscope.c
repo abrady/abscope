@@ -160,12 +160,14 @@ typedef enum CQueryFlag
     CQueryFlag_Func   = 2<<1,
 } CQueryFlag;
 
+static CParse g_cp;
+
 int main(int argc, char **argv)
 {
     DirScan dir_scan = {0};
     int interactive = 0;
     int i;
-    struct CParse cp = {0};
+    struct CParse *cp = &g_cp;
     int process = 0;
     int c_query_flags = 0;
     char *query_str = 0;
@@ -216,6 +218,16 @@ int main(int argc, char **argv)
                 break;
             case 'T':
                 return test();
+            case 'f':
+                i++;
+                c_debug = 1;
+                if(0!=c_process_file(cp,argv[i]))
+                {
+                    fprintf(stderr,"failed to parse %s",argv[i]);
+                    return -1;
+                }
+                i++;
+                break;
             };
         }
         break;
@@ -230,18 +242,18 @@ int main(int argc, char **argv)
         {
             char *fn = dir_scan.files[i];
             if(c_ext(fn))
-                res += c_process_file(&cp,fn);
+                res += c_process_file(cp,fn);
         }
         
-        res += c_on_processing_finished(&cp);
+        res += c_on_processing_finished(cp);
         return res;
     }
     
-    if(c_load(&cp)<0)
+    if(c_load(cp)<0)
         return -1;    
     if(c_query_flags) {
         if(c_query_flags & CQueryFlag_Struct)
-            c_findstructs(&cp,query_str);
+            c_findstructs(cp,query_str);
     }
     else if(interactive){
         int c = getchar();
@@ -251,7 +263,7 @@ int main(int argc, char **argv)
             puts("enter struct to search for:");
             gets(s);
             printf("searching for %s:\n",s);
-            c_findstructs(&cp,s);
+            c_findstructs(cp,s);
         };
     }
     return 0;

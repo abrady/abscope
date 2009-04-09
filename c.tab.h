@@ -34,7 +34,7 @@
      STATIC = 260,
      STRUCT = 261,
      AUTO_COMMAND = 262,
-     META_PARAM = 263,
+     CHAR_LITERAL = 263,
      TOK = 264,
      STR = 265
    };
@@ -45,7 +45,7 @@
 #define STATIC 260
 #define STRUCT 261
 #define AUTO_COMMAND 262
-#define META_PARAM 263
+#define CHAR_LITERAL 263
 #define TOK 264
 #define STR 265
 

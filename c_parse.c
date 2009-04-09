@@ -32,7 +32,7 @@ void add_struct_decl(struct CParse *ctxt, char *struct_name)
 
 int c_process_file(struct CParse *cp, char *fn)
 {
-    int parse_res;
+    int parse_res = 0;
     cp->parse_file = fn;
     cp->parse_line = 1;
     cp->fp = fopen(cp->parse_file,"rb");
@@ -45,9 +45,9 @@ int c_process_file(struct CParse *cp, char *fn)
     if(0 != (parse_res = c_parse(cp)))
     {
         printf("failed to parse file %s, error %i\n",cp->parse_file,parse_res);
-        return parse_res;
     }
-    return 0;
+    fclose(cp->fp);
+    return parse_res;
 }
 
 int c_on_processing_finished(struct CParse *cp)

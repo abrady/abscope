@@ -40,6 +40,9 @@ static void print_token_value (FILE *, int, YYSTYPE);
 #pragma warning(disable:4702) // unreachable code
 %}
 
+// ========================================
+// directives to the parser
+
 %defines
 %debug
 %token-table
@@ -48,14 +51,18 @@ static void print_token_value (FILE *, int, YYSTYPE);
 %locations
 %parse-param {struct CParse *ctxt}
 %lex-param   {struct CParse *ctxt}
-%token<str> TYPEDEF EXTERN STATIC STRUCT AUTO_COMMAND
-%token<str> META_PARAM
+
+// ========================================
+// tokens
+
+%token TYPEDEF EXTERN STATIC STRUCT AUTO_COMMAND
+%token<num> CHAR_LITERAL
 %token<str> TOK STR
 %type<str>  type_decl
 
+%destructor { free ($$); } TOK STR type_decl
 // %destructor { free( $$)  } string
 
-%token TYPEDEF EXTERN STATIC 
 
 %start translation_unit
 
@@ -63,15 +70,14 @@ static void print_token_value (FILE *, int, YYSTYPE);
 
 translation_unit:
                 external_declaration
-        |       external_declaration translation_unit 
+        |       translation_unit external_declaration
+        |       translation_unit ignored_stuff
                 ;
 
 external_declaration:
-                function_definition
+                function_definition 
         |       struct_decl
         |       autocmd_decl
-        |       ignored_stuff 
-        |       error ';'
                 ;
 
 unary_operator: 
@@ -89,17 +95,27 @@ ignored_stuff:
         |       ';'
         |       '['
         |       ']'
-        |       '^'
         |       ','
         |       '\\'
+        |       '.'
+        |       '<'
+        |       '>'
+        |       '/'
+        |       '%'
+        |       '^'
+        |       '('
+        |       ')'
         |       unary_operator
         |       STR 
         |       EXTERN
         |       STATIC
+        |       CHAR_LITERAL
+        |       error ignored_stuff
         ;
 
 function_definition:
                 type_decl TOK '(' function_args_opt ')' '{' /*{ printf("function def. ret(%s) fn(%s)\n", $2, $3); }*/
+        |       type_decl 
                 ;
 
 function_arg:   
@@ -137,14 +153,19 @@ int yylex (struct CParse *ctxt)
         { "AUTO_COMMAND",      AUTO_COMMAND },
     };
     int c;
-    char tok[128];
-    char *i = tok;
+    char tok[4096];
+    char *i;
     int j;
     int newline;
-
-    yylloc.first_line = ctxt->parse_line;
+    int first_line;
+// think of the gotos as a tail recursion, otherwise
+// every comment, preprocessor, etc. would push unnecessary
+// contxt onto the stack.
+yylex_start: 
+    i = tok;
+    first_line = yylloc.first_line = ctxt->parse_line;
     newline = 0;
-    while ((c = getc(ctxt->fp)) == ' ' || c == '\t' || c == '\n' || c == '\r')
+    while ((c = getc(ctxt->fp)) != EOF && isspace(c))
     {
         if(c == '\n')
         {
@@ -159,11 +180,23 @@ int yylex (struct CParse *ctxt)
 
     if(newline && c == '#')
     {
+        char last = 0;
         // eat preprocessor (could do in grammer, but what the hey)
-        while((c = getc(ctxt->fp)) != '\n' && c != EOF)
-            ; // empty
+        // if line ends with \, continue to eat.
+        for(;;)
+        {
+            while((c = getc(ctxt->fp)) != '\n' && c != EOF)
+            {
+                if(!isspace(c))
+                    last = c;
+            }
+            if(last == '\\')
+                ctxt->parse_line++;
+            else
+                break;
+        }
         ungetc (c, ctxt->fp);
-        return yylex(ctxt);
+        goto yylex_start;
     }
     else if(c == '/') // take care of comments
     {
@@ -173,7 +206,7 @@ int yylex (struct CParse *ctxt)
             while((c = getc(ctxt->fp)) != '\n' && c != EOF)
                 ; // empty
             ungetc (c, ctxt->fp);
-            return yylex(ctxt);
+            goto yylex_start;
         }
         else if(c == '*')
         {
@@ -189,14 +222,45 @@ int yylex (struct CParse *ctxt)
                     break;
                 ungetc(c, ctxt->fp);
             }
-            return yylex(ctxt);
+            goto yylex_start;
         }
         ungetc(c, ctxt->fp);
     }
+    else if(c == '\'')     // 'a', '\'', '\\'
+    {
+        c = getc(ctxt->fp);
+        if(c == '\\')
+            c = getc(ctxt->fp);
+        yylval.num = c;
+        c = getc(ctxt->fp);
+        if(c != '\'')
+            ungetc(c, ctxt->fp); // malformed, oh-well
+        return CHAR_LITERAL;
+    }
     else if(c == '"')
     {
-        while((c=getc(ctxt->fp))!='"' && c != EOF)
+        while((c=getc(ctxt->fp)) != EOF)
+        {
+            if(c == '\\') // \n, \t, \\, \<newline> etc.
+            {
+                *i++ = c;
+                c = getc(ctxt->fp);
+                while(c != EOF && c == ' ' || c == '\t' || c == '\r' || c == '\n')
+                {
+                    if(c == '\n')
+                        ctxt->parse_line++;
+                    c = getc(ctxt->fp);
+                }
+
+                if(c == EOF)
+                    break;
+                else
+                    *i++ = c;
+            }
+            else if(c == '"')
+                break;
             *i++ = c;
+        }
         *i = 0;
         yylval.str = _strdup(tok);
         if(c != '"')
@@ -241,7 +305,7 @@ char *tok_append(char *a,char *b)
 static void print_token_value (FILE *file, int type, YYSTYPE value)
 {
 //    if (type == VAR)
-    if(type > 255)
+    if(type >= 258)
         fprintf (file, "%s", value.str);
     else
         fprintf(file,"'%c'",type);
