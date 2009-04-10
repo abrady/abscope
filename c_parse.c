@@ -44,7 +44,7 @@ int c_process_file(struct CParse *cp, char *fn)
     }
     if(0 != (parse_res = c_parse(cp)))
     {
-        printf("failed to parse file %s, error %i\n",cp->parse_file,parse_res);
+        printf("failed to parse file %s, error(%i):%s\n",cp->parse_file,parse_res,cp->parse_error);
     }
     fclose(cp->fp);
     return parse_res;

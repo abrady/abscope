@@ -71,13 +71,13 @@ static void print_token_value (FILE *, int, YYSTYPE);
 translation_unit:
                 external_declaration
         |       translation_unit external_declaration
-        |       translation_unit ignored_stuff
                 ;
 
 external_declaration:
-                function_definition 
+                function_definition
         |       struct_decl
         |       autocmd_decl
+        |       ignored_stuff // catches errors too
                 ;
 
 unary_operator: 
@@ -105,26 +105,28 @@ ignored_stuff:
         |       '^'
         |       '('
         |       ')'
+        |       '|'
+        |       '?'
+        |       ':'
         |       unary_operator
         |       STR 
         |       EXTERN
         |       STATIC
         |       CHAR_LITERAL
-        |       error ignored_stuff
+        |       error 
         ;
 
 function_definition:
                 type_decl TOK '(' function_args_opt ')' '{' /*{ printf("function def. ret(%s) fn(%s)\n", $2, $3); }*/
-        |       type_decl 
                 ;
 
 function_arg:   
-                type_decl TOK { printf("arg(%s,%s)", $1, $2); }
+                type_decl TOK //{ printf("arg(%s,%s)", $1, $2); }
                 ;
 
 function_args_opt:
-                /*empty*/ { printf("no args. "); }
-        |       function_arg ',' function_args_opt { printf(","); }
+                /*empty*/ //{ printf("no args. "); }
+        |       function_arg ',' function_args_opt //{ printf(","); }
         |       function_arg
                 ;
 
@@ -289,7 +291,7 @@ yylex_start:
 
 void yyerror (struct CParse *ctxt, char const *s)
 {
-    fprintf (stderr, "%s(%i): %s\n", ctxt->parse_file, ctxt->parse_line, s);
+    _snprintf(ctxt->parse_error, DIMOF(ctxt->parse_error), "%s(%i): %s\n", ctxt->parse_file, ctxt->parse_line, s);
 }
 
 char *tok_append(char *a,char *b)

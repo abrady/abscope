@@ -2,7 +2,7 @@
 ;; process-buffer : the buffer for a process
 ;; process-mark   : 
 
-(setq abscope-dir "c:/absrc/abscope/")
+(setq abscope-dir "c:/src")
 (setq abscope-file "abscope-queries.org")
 
 (progn
@@ -16,4 +16,4 @@
   (start-process "abscope" (current-buffer) "c:/absrc/abscope/abscope.exe" 
                  "-Qs" struct)
   ) 
-(ab-query-struct "Foo"))
+(ab-query-struct "ItemDef"))

@@ -213,7 +213,8 @@ int main(int argc, char **argv)
                 };
                 break;
             case 'R':
-                scan_dir(&dir_scan,argv[++i],1);
+                i++;
+                scan_dir(&dir_scan,argv[i]?argv[i]:".",1);
                 process = 1;
                 break;
             case 'T':
