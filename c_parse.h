@@ -15,34 +15,22 @@
 #include "stdio.h"
 #include "stdlib.h"
 
-typedef struct CParse
-{
-    // gathered info
-    struct LocInfo *structs;
-    int       n_structs;
-
-    // state info
-    FILE *fp;
-    char *parse_file;
-    int   parse_line;
-    char  parse_error[512];
-} CParse;
 
 // *************************************************************************
 // for parser
 // *************************************************************************
 
-void add_struct_decl(struct CParse *ctxt, char *struct_name);
+void add_struct_decl(Parse *ctxt, char *struct_name, int line);
 
 // *************************************************************************
 // invocation
 // *************************************************************************
 int c_ext(char *file);
-int c_process_file(struct CParse *cp, char *fn);
-int c_on_processing_finished(struct CParse *cp);
+int c_process_file(Parse *cp, char *fn);
+int c_on_processing_finished(Parse *cp);
 
-int c_load(struct CParse *cp);
-int c_findstructs(CParse *cp, char *sn);
+int c_load(struct Parse *cp);
+int c_findstructs(Parse *cp, char *sn);
 
 extern int c_debug;
 #endif //C_PARSE_H

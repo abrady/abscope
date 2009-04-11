@@ -10,6 +10,7 @@
 #define LOCINFO_H
 
 #include "abscope.h"
+#include "strs.h"
 
 typedef struct LocInfo
 {
@@ -18,17 +19,28 @@ typedef struct LocInfo
     int line;
 } LocInfo;
 
-typedef struct FileLocInfo
+typedef struct Parse
 {
-    int32_t tok;
-    int32_t file;
-    int32_t line;
-} FileLocInfo;
+    // gathered info
+    struct LocInfo *structs;
+    int       n_structs;
 
-int absfile_write_locinfos(char *fn, struct LocInfo *infos, int n_infos);
-int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos);
+    // state info
+    FILE *fp;
+    char *parse_file;
+    int   parse_line;
+    char  parse_error[512];
+
+    // str pool
+    StrPool pool;
+} Parse;
+
+int absfile_write_locinfos(char *fn, struct LocInfo *infos, int n_infos, StrPool *pool);
+int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos, StrPool *pool);
 
 int locinfo_vprintf(LocInfo *li,char *fmt,va_list args);
 int locinfo_printf(LocInfo *li,char *fmt,...);
+
+void add_locinfo(StrPool *pool, LocInfo **li, int *n, char *tok, char *fn, int line);
 
 #endif //LOCINFO_H

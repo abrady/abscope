@@ -149,8 +149,8 @@ typedef struct YYLTYPE
 #define YYINCLUDED_STDLIB_H
 
 #define __STDC__ // ab: do this last, only needed by output of this
-    int yylex (struct CParse *ctxt);
-    void yyerror (struct CParse *ctxt, char const *);
+    int yylex (struct Parse *ctxt);
+    void yyerror (struct Parse *ctxt, char const *);
     void meta_init()
     {
         printf("meta_init\n");
@@ -950,7 +950,7 @@ int yyparse ();
 # endif
 #else /* ! YYPARSE_PARAM */
 #if defined (__STDC__) || defined (__cplusplus)
-int yyparse (struct CParse *ctxt);
+int yyparse (struct Parse *ctxt);
 #else
 int yyparse ();
 #endif
@@ -985,11 +985,11 @@ int yyparse (YYPARSE_PARAM)
 #else /* ! YYPARSE_PARAM */
 #if defined (__STDC__) || defined (__cplusplus)
 int
-yyparse (struct CParse *ctxt)
+yyparse (struct Parse *ctxt)
 #else
 int
 yyparse (ctxt)
-    struct CParse *ctxt;
+    struct Parse *ctxt;
 #endif
 #endif
 {
@@ -1259,7 +1259,7 @@ yyreduce:
 
   case 46:
 #line 139 "c.y"
-    { ctxt->parse_line = (yylsp[-1]).first_line; add_struct_decl(ctxt, (yyvsp[-1].str)); ;}
+    { add_struct_decl(ctxt, (yyvsp[-1].str), (yylsp[-1]).first_line); ;}
     break;
 
 
@@ -1544,8 +1544,8 @@ yyreturn:
 
 #line 146 "c.y"
   
-struct CParse *ctxt;
-int yylex (struct CParse *ctxt)
+struct Parse *ctxt;
+int yylex (struct Parse *ctxt)
 {
     static struct { char *kw; int tok; } kws[] = {
         { "typedef",           TYPEDEF },
@@ -1574,10 +1574,7 @@ yylex_start:
             ctxt->parse_line++;
             newline = 1;
         }
-        else
-            newline = 0;
     }
-
     yylloc.last_line = ctxt->parse_line;
 
     if(newline && c == '#')
@@ -1689,7 +1686,7 @@ yylex_start:
     return TOK;
 }
 
-void yyerror (struct CParse *ctxt, char const *s)
+void yyerror (struct Parse *ctxt, char const *s)
 {
     _snprintf(ctxt->parse_error, DIMOF(ctxt->parse_error), "%s(%i): %s\n", ctxt->parse_file, ctxt->parse_line, s);
 }

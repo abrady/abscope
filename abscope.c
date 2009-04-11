@@ -116,11 +116,11 @@ FILE *absfile_open_read(char *fn)
 }
 
 #define TEST(COND) if(!(COND)) {printf(#COND "failed\n"); return -1;}
-static int test()
+static int abscope_test()
 {
     int i;
     DirScan dir_scan = {0};
-    CParse cp = {0};
+    Parse cp = {0};
     static char *structs_to_find[] = {
         "dirent",
         "Foo",
@@ -130,6 +130,30 @@ static int test()
     static char *structs_not_to_find[] = {
         "Cat", // typedef only
     };
+    StrPool pool = {0};
+    char *p;
+
+    TEST(!strpool_find_str(&pool,"abc"));
+    p=strpool_find_add_str(&pool,"abc");
+    TEST(p);
+    TEST(0==strcmp("abc",strpool_find_add_str(&pool,"abc")));
+    TEST(p == strpool_find_add_str(&pool,"abc"));
+    
+    for(i = 0; i < 100; ++i)
+    {
+        char tmp[128];
+        sprintf(tmp,"%i",i);
+        strpool_find_add_str(&pool,tmp);
+    }
+    p = pool.end;
+    for(i = 0; i < 100; ++i)
+    {
+        char tmp[128];
+        sprintf(tmp,"%i",i);
+        strpool_find_add_str(&pool,tmp);
+    }
+    TEST(p == pool.end);
+    free(pool.strs);
 
     printf("TESTING\n");
     printf("scanning ./test...");
@@ -160,14 +184,14 @@ typedef enum CQueryFlag
     CQueryFlag_Func   = 2<<1,
 } CQueryFlag;
 
-static CParse g_cp;
+static Parse g_cp;
 
 int main(int argc, char **argv)
 {
     DirScan dir_scan = {0};
     int interactive = 0;
     int i;
-    struct CParse *cp = &g_cp;
+    struct Parse *cp = &g_cp;
     int process = 0;
     int c_query_flags = 0;
     char *query_str = 0;
@@ -218,15 +242,16 @@ int main(int argc, char **argv)
                 process = 1;
                 break;
             case 'T':
-                return test();
+                return abscope_test();
             case 'f':
                 i++;
-                c_debug = 1;
+                // c_debug = 1;
                 if(0!=c_process_file(cp,argv[i]))
                 {
                     fprintf(stderr,"failed to parse %s",argv[i]);
                     return -1;
                 }
+                c_on_processing_finished(cp);
                 i++;
                 break;
             };
@@ -250,22 +275,26 @@ int main(int argc, char **argv)
         return res;
     }
     
-    if(c_load(cp)<0)
-        return -1;    
-    if(c_query_flags) {
-        if(c_query_flags & CQueryFlag_Struct)
-            c_findstructs(cp,query_str);
-    }
-    else if(interactive){
-        int c = getchar();
-        char s[128];
-        switch(c){
-        case 's':
-            puts("enter struct to search for:");
-            gets(s);
-            printf("searching for %s:\n",s);
-            c_findstructs(cp,s);
-        };
-    }
+
+    if(query_str)
+    {
+        if(c_load(cp)<0)
+            return -1;    
+        if(c_query_flags) {
+            if(c_query_flags & CQueryFlag_Struct)
+                c_findstructs(cp,query_str);
+        }
+        else if(interactive){
+            int c = getchar();
+            char s[128];
+            switch(c){
+            case 's':
+                puts("enter struct to search for:");
+                gets(s);
+                printf("searching for %s:\n",s);
+                c_findstructs(cp,s);
+            };
+        }
+    }    
     return 0;
 }

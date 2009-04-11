@@ -8,29 +8,18 @@
  ***************************************************************************/
 #include "c_parse.h"
 #include "abscope.h"
+#include "locinfo.h"
 
 // from c.tab.c
-extern int c_parse(struct CParse *ctxt);
+extern int c_parse(Parse *ctxt);
 extern int c_debug;
 
-
-
-void add_locinfo(CParse *ctxt, LocInfo **li, int *n, char *tok)
+void add_struct_decl(Parse *ctxt, char *struct_name, int line)
 {
-    LocInfo *l;
-    (*li) = (LocInfo*)realloc(*li,sizeof(**li)*++(*n));
-    l = (*li)+(*n)-1;
-    l->tok = _strdup(tok);
-    l->file = ctxt->parse_file;
-    l->line = ctxt->parse_line;
+    add_locinfo(&ctxt->pool,&ctxt->structs,&ctxt->n_structs,struct_name,ctxt->parse_file,line);
 }
 
-void add_struct_decl(struct CParse *ctxt, char *struct_name)
-{
-    add_locinfo(ctxt,&ctxt->structs,&ctxt->n_structs,struct_name);
-}
-
-int c_process_file(struct CParse *cp, char *fn)
+int c_process_file(Parse *cp, char *fn)
 {
     int parse_res = 0;
     cp->parse_file = fn;
@@ -50,22 +39,22 @@ int c_process_file(struct CParse *cp, char *fn)
     return parse_res;
 }
 
-int c_on_processing_finished(struct CParse *cp)
+int c_on_processing_finished(Parse *cp)
 {   
     int res = 0;
     
     printf("%i structs:\n",cp->n_structs);
-    res += absfile_write_locinfos("c_structs.abs",cp->structs,cp->n_structs);
+    res += absfile_write_locinfos("c_structs.abs",cp->structs,cp->n_structs,&cp->pool);
 
     return res;
 }
 
-int c_load(struct CParse *cp)
+int c_load(Parse *cp)
 {
-    return absfile_read_locinfos("c_structs.abs",&cp->structs,&cp->n_structs);
+    return absfile_read_locinfos("c_structs.abs",&cp->structs,&cp->n_structs,&cp->pool);
 }
 
-int c_findstructs(CParse *cp, char *sn)
+int c_findstructs(Parse *cp, char *sn)
 {
     int i;
     for(i = 0; i < cp->n_structs; ++i)

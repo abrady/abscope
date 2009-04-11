@@ -16,8 +16,8 @@
 #define YYINCLUDED_STDLIB_H
 
 #define __STDC__ // ab: do this last, only needed by output of this
-    int yylex (struct CParse *ctxt);
-    void yyerror (struct CParse *ctxt, char const *);
+    int yylex (struct Parse *ctxt);
+    void yyerror (struct Parse *ctxt, char const *);
     void meta_init()
     {
         printf("meta_init\n");
@@ -49,8 +49,8 @@ static void print_token_value (FILE *, int, YYSTYPE);
 %name-prefix="c_"
 %verbose
 %locations
-%parse-param {struct CParse *ctxt}
-%lex-param   {struct CParse *ctxt}
+%parse-param {struct Parse *ctxt}
+%lex-param   {struct Parse *ctxt}
 
 // ========================================
 // tokens
@@ -136,7 +136,7 @@ type_decl:
                 ;
 
 
-struct_decl:    TYPEDEF STRUCT TOK '{' { ctxt->parse_line = @3.first_line; add_struct_decl(ctxt, $3); }
+struct_decl:    TYPEDEF STRUCT TOK '{' { add_struct_decl(ctxt, $3, @3.first_line); }
 
         ;
 
@@ -144,8 +144,8 @@ autocmd_decl:   AUTO_COMMAND
         ;
 
 %%  
-struct CParse *ctxt;
-int yylex (struct CParse *ctxt)
+struct Parse *ctxt;
+int yylex (struct Parse *ctxt)
 {
     static struct { char *kw; int tok; } kws[] = {
         { "typedef",           TYPEDEF },
@@ -174,10 +174,7 @@ yylex_start:
             ctxt->parse_line++;
             newline = 1;
         }
-        else
-            newline = 0;
     }
-
     yylloc.last_line = ctxt->parse_line;
 
     if(newline && c == '#')
@@ -289,7 +286,7 @@ yylex_start:
     return TOK;
 }
 
-void yyerror (struct CParse *ctxt, char const *s)
+void yyerror (struct Parse *ctxt, char const *s)
 {
     _snprintf(ctxt->parse_error, DIMOF(ctxt->parse_error), "%s(%i): %s\n", ctxt->parse_file, ctxt->parse_line, s);
 }

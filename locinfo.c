@@ -8,15 +8,10 @@
  ***************************************************************************/
 #include "locinfo.h"
 
-int absfile_write_locinfos(char *fn, struct LocInfo *infos, int n_infos)
+int absfile_write_locinfos(char *fn, struct LocInfo *infos, int n_infos, StrPool *pool)
 {
     FILE *fp;
-    int32_t n_strs = 0;
-    char **strs = 0;
-    FileLocInfo *finfos;
-    int strs_len;
-    int i;
-    
+    int32_t strs_len = 0;
     
     fp = absfile_open_write(fn);
     if(!fp)
@@ -25,91 +20,54 @@ int absfile_write_locinfos(char *fn, struct LocInfo *infos, int n_infos)
         return -1;
     }
     
-    finfos = malloc(sizeof(*finfos)*n_infos);
-    
-    strs_len = 0;
-    n_strs = 0;
-    for(i = 0; i < n_infos; ++i)
-    {
-        FileLocInfo *finfo = finfos+i;
-        LocInfo *info = infos+i;
-        
-        finfo->tok = strs_find_add_str(&strs,&n_strs,info->tok);
-        finfo->file = strs_find_add_str(&strs,&n_strs,info->file);        
-        finfo->line = info->line;
-    }
-    
-    for(i = 0; i < n_strs; ++i)
-        strs_len += strlen(strs[i]) + 1;
-    
     // write strings
-    fwrite(&n_strs,sizeof(n_strs),1,fp);
-    fwrite(&strs_len,sizeof(strs_len),1,fp);
-    for(i = 0; i < n_strs; ++i)
-    {
-        int len = strlen(strs[i])+1;
-        fwrite(strs[i],len,1,fp);
-    }
+    strs_len = pool->end - pool->strs;          
+    fwrite(&pool->strs,sizeof(pool->strs),1,fp); // 1. write start ptr
+    fwrite(&strs_len,sizeof(strs_len),1,fp);     // 2. mem block size
+    fwrite(pool->strs,strs_len,1,fp);            // 3. data
     
     // write infos
     fwrite(&n_infos,sizeof(n_infos),1,fp);
-    fwrite(finfos,sizeof(FileLocInfo),n_infos,fp);
+    fwrite(infos,sizeof(*infos),n_infos,fp);
     
-    free(strs);
-    free(finfos);
     fclose(fp);
     return 0;
 }
 
-int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos)
+int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos, StrPool *pool)
 {
     int res = 0;
     int nread;
-    char *p;
-    char *strdata;
-    char **strs;
+    char *start;
     int32_t strdata_len = 0;
     int32_t n_strs = 0;
     FILE *fp = absfile_open_read(fn);
     int i;
-    FileLocInfo *finfos = 0;
     
-    if(!fp)
+    if(!fp || !pool)
     {
         fprintf(stderr,"couldn't open file %s to read locinfos\n",fn);
         return -1;
     }
-    fread(&n_strs,sizeof(n_strs),1,fp);
-    fread(&strdata_len,sizeof(strdata_len),1,fp);
+
+    // read the string data
+    fread(&start,sizeof(start),1,fp);             // 1. pointer
+    fread(&strdata_len,sizeof(strdata_len),1,fp); // 2. data len
+
     if(!n_strs || !strdata_len)
     {
         fprintf(stderr,"unable to read number strs %i or data len %i",n_strs,strdata_len);
         return -2;
     }
     
-    // read the string data
-    strdata = malloc(strdata_len);
-    strs = malloc(sizeof(*strs)*n_strs);
-    fread(strdata,strdata_len,1,fp);
-    p = strdata;
-    for(i = 0;i < n_strs;++i)
-    {
-        char *pt;
-        strs[i] = p;
-        pt = strchr(p,0);
-        if(!pt)
-        {
-            fprintf(stderr,"couldn't advance to next string at element %i, previous string %s",i,p);
-            res = -3;
-            goto cleanup;
-        }
-        p = pt + 1;
-    }
+    pool->strs = realloc(pool->strs,strdata_len);
+    pool->end  = pool->strs + strdata_len;
+    fread(pool->strs,strdata_len,1,fp);           // 3. data
     
     // read the on-file location info
     fread(pn_infos,sizeof(*pn_infos),1,fp);
-    finfos = malloc(sizeof(*finfos)*(*pn_infos));
-    nread  = fread(finfos,sizeof(*finfos),(*pn_infos),fp);
+    *pinfos = realloc(*pinfos,sizeof(**pinfos)*(*pn_infos));
+    nread  = fread(*pinfos,sizeof(**pinfos),(*pn_infos),fp);
     if(nread != *pn_infos)
     {
         fprintf(stderr,"read %i infos, expected %i",nread,*pn_infos);
@@ -118,19 +76,15 @@ int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos)
         
     }
     
-    *pinfos = realloc(*pinfos,sizeof(**pinfos)*(*pn_infos));
+    // fixup strings
     for(i = 0; i < *pn_infos; ++i)
     {
-        FileLocInfo *finfo = finfos + i;
         LocInfo *info = (*pinfos)+i;
-        info->line = finfo->line;
-        info->tok = strs[finfo->tok];
-        info->file = strs[finfo->file];
+        info->tok  = pool->strs + (int)(info->tok  - start);
+        info->file = pool->strs + (int)(info->file - start);
     }
     
 cleanup:
-    free(finfos);
-    free(strs);
     return res;
 }
 
@@ -148,4 +102,14 @@ int locinfo_printf(LocInfo *li,char *fmt,...)
     r = locinfo_vprintf(li,fmt,vl);
     va_end(vl);
     return r;
+}
+
+void add_locinfo(StrPool *pool, LocInfo **li, int *n, char *tok, char *fn, int line)
+{
+    LocInfo *l;
+    (*li) = (LocInfo*)realloc(*li,sizeof(**li)*++(*n));
+    l = (*li)+(*n)-1;
+    l->tok  = strpool_find_add_str(pool,tok);
+    l->file = strpool_find_add_str(pool,fn);
+    l->line = line;
 }
