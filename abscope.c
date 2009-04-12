@@ -11,7 +11,13 @@
 #include "c_parse.h"
 #include "c.tab.h"
 
-
+int file_exists(char *fname)
+{
+	struct stat status;
+	if(!stat(fname, &status) && status.st_mode & _S_IFREG)
+        return 1;
+	return 0;
+}
 
 typedef struct DirScan
 {
@@ -73,8 +79,6 @@ static void usage(int argc, char**argv)
         );
 }
 
-
-
 char* downcase(char *str)
 {
     char *p = str;
@@ -85,8 +89,6 @@ char* downcase(char *str)
     }
     return p;
 }
-
-
 
 static int32_t ABS_FILE_VERSION = 0x20090326;
 FILE *absfile_open_write(char *fn)
@@ -115,24 +117,14 @@ FILE *absfile_open_read(char *fn)
     return fp;
 }
 
-#define TEST(COND) if(!(COND)) {printf(#COND "failed\n"); return -1;}
-static int abscope_test()
+#define TEST(COND) if(!(COND)) {printf(#COND ": failed\n"); return -1;}
+
+static int test_strpool(void)
 {
-    int i;
-    DirScan dir_scan = {0};
-    Parse cp = {0};
-    static char *structs_to_find[] = {
-        "dirent",
-        "Foo",
-        "Bar",
-        "Baz",
-    };
-    static char *structs_not_to_find[] = {
-        "Cat", // typedef only
-    };
     StrPool pool = {0};
     char *p;
-
+    int i;
+    
     TEST(!strpool_find_str(&pool,"abc"));
     p=strpool_find_add_str(&pool,"abc");
     TEST(p);
@@ -154,26 +146,71 @@ static int abscope_test()
     }
     TEST(p == pool.end);
     free(pool.strs);
+    return 0;
+}
+
+static int test_locinfo(void)
+{
+    Parse p = {0}; 
+    Parse p2 = {0}; 
+    printf("testing locinfo...");
+    parse_add_locinfo(&p,"foo","bar","baz",0xaabbccdd);
+    parse_add_locinfo(&p,"alpha","beta","delta",0xaabbccdd);
+    TEST(0==absfile_write_parse("test.absfile",&p));
+    TEST(0==absfile_read_parse("test.absfile",&p2));
+    TEST(p2.n_locs == 2);
+    TEST(0==strcmp(p2.locs[0].tag,"foo"));
+    TEST(0==strcmp(p2.locs[0].context,"bar"));
+    TEST(0==strcmp(p2.locs[0].file,"baz"));
+    TEST(0==strcmp(p2.locs[1].tag,"alpha"));
+    TEST(0==strcmp(p2.locs[1].context,"beta"));
+    TEST(0==strcmp(p2.locs[1].file,"delta"));    
+    printf("done.\n");
+    free(p.locs);
+    free(p.pool.strs);
+    free(p2.locs);
+    free(p2.pool.strs);
+    return 0;
+}
+
+static int abscope_test()
+{
+    int i;
+    DirScan dir_scan = {0};
+    CParse cp = {0};
+    static char *structs_to_find[] = {
+        "dirent",
+        "Foo",
+        "Bar",
+        "Baz",
+    };
+    static char *structs_not_to_find[] = {
+        "Cat", // typedef only
+    };
 
     printf("TESTING\n");
+
+    TEST(0==test_strpool());
+    TEST(0==test_locinfo());
+    
     printf("scanning ./test...");
     scan_dir(&dir_scan,"./test",1);
     printf("done.\n");
 
     printf("found %i files:\n",dir_scan.n_files);
-    TEST(dir_scan.n_files == 3);
+    TEST(dir_scan.n_files >= 3);
     for(i = 0; i < dir_scan.n_files;++i)
     {
         int r;
         printf("scanning %s",dir_scan.files[i]);
-        r = c_process_file(&cp,dir_scan.files[i]);
+        r = c_parse_file(&cp,dir_scan.files[i]);
         TEST(r>=0);
     }
 
     for(i = 0; i < DIMOF(structs_to_find); ++i)
-        TEST(0<=c_findstructs(&cp,structs_to_find[i]));
+        TEST(0<c_findstructs(&cp,structs_to_find[i]));
     for(i = 0; i < DIMOF(structs_not_to_find); ++i)
-        TEST(0<=c_findstructs(&cp,structs_not_to_find[i]));
+        TEST(0<c_findstructs(&cp,structs_not_to_find[i]));
     return 0;
 }
 
@@ -184,14 +221,14 @@ typedef enum CQueryFlag
     CQueryFlag_Func   = 2<<1,
 } CQueryFlag;
 
-static Parse g_cp;
+static CParse g_cp;
 
 int main(int argc, char **argv)
 {
     DirScan dir_scan = {0};
     int interactive = 0;
     int i;
-    struct Parse *cp = &g_cp;
+    struct CParse *cp = &g_cp;
     int process = 0;
     int c_query_flags = 0;
     char *query_str = 0;
@@ -246,7 +283,7 @@ int main(int argc, char **argv)
             case 'f':
                 i++;
                 // c_debug = 1;
-                if(0!=c_process_file(cp,argv[i]))
+                if(0!=c_parse_file(cp,argv[i]))
                 {
                     fprintf(stderr,"failed to parse %s",argv[i]);
                     return -1;
@@ -268,7 +305,7 @@ int main(int argc, char **argv)
         {
             char *fn = dir_scan.files[i];
             if(c_ext(fn))
-                res += c_process_file(cp,fn);
+                res += c_parse_file(cp,fn);
         }
         
         res += c_on_processing_finished(cp);

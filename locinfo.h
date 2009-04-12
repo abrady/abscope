@@ -14,33 +14,27 @@
 
 typedef struct LocInfo
 {
-    char *tok;
+    char *tag;
+    char *context;
     char *file;
     int line;
 } LocInfo;
 
 typedef struct Parse
 {
-    // gathered info
-    struct LocInfo *structs;
-    int       n_structs;
-
-    // state info
-    FILE *fp;
-    char *parse_file;
-    int   parse_line;
-    char  parse_error[512];
-
-    // str pool
+    struct LocInfo *locs;
+    int       n_locs;
     StrPool pool;
 } Parse;
 
-int absfile_write_locinfos(char *fn, struct LocInfo *infos, int n_infos, StrPool *pool);
-int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos, StrPool *pool);
+int absfile_write_parse(char *fn, Parse *p);
+int absfile_read_parse(char *fn, Parse *p);
 
 int locinfo_vprintf(LocInfo *li,char *fmt,va_list args);
 int locinfo_printf(LocInfo *li,char *fmt,...);
 
-void add_locinfo(StrPool *pool, LocInfo **li, int *n, char *tok, char *fn, int line);
+void parse_add_locinfo(Parse *p,char *tag, char *context, char *filename, int line);
+int parse_print_search_tag(Parse *p,char *tag);
+
 
 #endif //LOCINFO_H

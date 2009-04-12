@@ -47,4 +47,6 @@ FILE *absfile_open_write(char *fn);
 FILE *absfile_open_read(char *fn);
 int match_ext(char *fn, char *ext);
 
+int file_exists(char *fname);
+
 #endif //ABSCOPE_H
