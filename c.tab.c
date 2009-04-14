@@ -1259,7 +1259,7 @@ yyreduce:
 
   case 46:
 #line 139 "c.y"
-    { ctxt->parse_line = (yylsp[-1]).first_line; add_struct_decl(ctxt, (yyvsp[-1].str)); ;}
+    { ctxt->parse_line = (yylsp[-2]).first_line; add_struct_decl(ctxt, (yyvsp[-1].str)); ;}
     break;
 
 

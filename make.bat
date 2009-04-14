@@ -1,7 +1,14 @@
+@for %%a in (cl.exe) do if EXIST %%~$PATH:a set vcvars_found=Y
+
+@if "%vcvars_found%"=="Y" goto after_vcvars
+
 @call "c:\Program Files\Microsoft Visual Studio 8\VC\bin\vcvars32.bat"
+@call "c:\Program Files (x86)\Microsoft Visual Studio 8\VC\bin\vcvars32.bat"
 @call "c:/Microsoft Visual Studio 8/VC/bin/vcvars32.bat"
 
-del c.tab.c c.tab.h c.output
+:after_vcvars
+
+@del c.tab.c c.tab.h c.output
 bison c.y
 @if NOT "%ERRORLEVEL%"=="0" goto error
 
@@ -12,7 +19,7 @@ bison c.y
 cl /MTd /RTCscu /W4 /ZI Kernel32.lib abscope.c locinfo.c c_parse.c c.tab.c strs.c
 @if NOT "%ERRORLEVEL%"=="0" goto error
 
-echo "done"
+@echo "done"
 goto end
 
 :error

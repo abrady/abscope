@@ -136,7 +136,7 @@ type_decl:
                 ;
 
 
-struct_decl:    TYPEDEF STRUCT TOK '{' { ctxt->parse_line = @3.first_line; add_struct_decl(ctxt, $3); }
+struct_decl:    TYPEDEF STRUCT TOK '{' { ctxt->parse_line = @2.first_line; add_struct_decl(ctxt, $3); }
 
         ;
 
