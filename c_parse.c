@@ -46,6 +46,9 @@ int c_on_processing_finished(CParse *cp)
     printf("%i structs\n",cp->structs.n_locs);
     res += absfile_write_parse("c_structs.abs",&cp->structs);
 
+    printf("%i funcs\n",cp->funcs.n_locs);
+    res += absfile_write_parse("c_funcs.abs",&cp->funcs);
+
     return res;
 }
 
@@ -57,6 +60,9 @@ int c_load(CParse *cp)
     return res;
 }
 
+#define FIND_START() S64 timer_start = timer_get()
+#define FIND_END() cp->parse_timing =+ timerdiff(timer_start)
+
 int c_findstructs(CParse *cp, char *sn)
 {
     return parse_print_search_tag(&cp->structs,sn);
@@ -66,4 +72,32 @@ int c_ext(char *file)
 {
     return match_ext(file,"c")
         || match_ext(file,"h");
+}
+
+void c_add_func(CParse *ctxt, char *name, int line)
+{
+    parse_add_locinfo(&ctxt->funcs,name,NULL,ctxt->parse_file,line);
+}
+
+int c_findfuncs(CParse *cp, char *name)
+{
+    return parse_print_search_tag(&cp->funcs,name);
+}
+
+int c_query(CParse *cp, char *tag, int query_flags)
+{
+    int res = 0;
+    if(query_flags & CQueryFlag_Struct)
+        res += c_findstructs(cp,tag);
+    if(query_flags & CQueryFlag_Func)
+        res += c_findfuncs(cp,tag);
+    return res;
+}
+
+void c_parse_print_time(CParse *cp)
+{
+    printf("lexing took %f overall:\n"
+           "getc took %f\n",
+           timer_elapsed(cp->lex_timing), 
+           timer_elapsed(cp->getc_timing));
 }

@@ -36,5 +36,6 @@ int locinfo_printf(LocInfo *li,char *fmt,...);
 void parse_add_locinfo(Parse *p,char *tag, char *context, char *filename, int line);
 int parse_print_search_tag(Parse *p,char *tag);
 
+double locinfo_time();
 
 #endif //LOCINFO_H

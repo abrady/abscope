@@ -30,7 +30,7 @@ char *strs_add_str(char ***pstrs, int *n_strs, char *s)
 char *strs_find_add_str(char ***pstrs, int *n_strs, char *s)
 {
     char *r;
-    if((r=strs_find_str(*pstrs,*n_strs,s))>=0)
+    if(NULL != (r=strs_find_str(*pstrs,*n_strs,s)))
         return r;
     return strs_add_str(pstrs,n_strs,s);
 }

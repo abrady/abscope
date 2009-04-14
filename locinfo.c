@@ -8,6 +8,8 @@
  ***************************************************************************/
 #include "locinfo.h"
 
+static S64 locinfo_timer = 0;
+
 static void fixup_strs(Parse *p,char *old_base)
 {
     int i;
@@ -25,7 +27,8 @@ int absfile_write_parse(char *fn, Parse *p)
 {
     FILE *fp;
     int32_t strs_len = 0;
-    
+    TIMER_START();
+
     fp = absfile_open_write(fn);
     if(!fp)
     {
@@ -44,6 +47,7 @@ int absfile_write_parse(char *fn, Parse *p)
     fwrite(p->locs,sizeof(*p->locs),p->n_locs,fp);
     
     fclose(fp);
+    TIMER_END(locinfo_timer);
     return 0;
 }
 
@@ -51,10 +55,12 @@ int absfile_read_parse(char *fn, Parse *p)
 {
     int res = 0;
     int nread;
+    int n_alloc;
     char *pool_base;
     int32_t strdata_len = 0;
     FILE *fp = absfile_open_read(fn);
-    
+    TIMER_START();
+
     if(!fp || !p)
     {
         fprintf(stderr,"couldn't open file %s to read locinfos\n",fn);
@@ -77,9 +83,10 @@ int absfile_read_parse(char *fn, Parse *p)
     
     // read the on-file location info
     fread(&p->n_locs,sizeof(p->n_locs),1,fp);
-    p->locs = realloc(p->locs,sizeof(*p->locs)*p->n_locs);
-    nread  = fread(p->locs,sizeof(*p->locs),p->n_locs,fp);
-    if(nread != p->n_locs)
+    n_alloc = sizeof(*p->locs)*p->n_locs;
+    p->locs = realloc(p->locs,n_alloc);
+    nread  = fread(p->locs,n_alloc,1,fp);
+    if(nread != 1)
     {
         fprintf(stderr,"read %i infos, expected %i",nread,p->n_locs);
         res = -4;
@@ -89,12 +96,13 @@ int absfile_read_parse(char *fn, Parse *p)
     fixup_strs(p,pool_base);
     
 cleanup:
+    TIMER_END(locinfo_timer);
     return res;
 }
 
 void locinfo_print(LocInfo *li)
 {
-    printf("** [[file:%s::%i]] %s", li->file, li->line, li->tag, li->context?li->context:"");
+    printf("** [[file:%s::%i]] %s\n%s", li->file, li->line, li->tag, li->context?li->context:"");
 }
 
 
@@ -139,6 +147,7 @@ int parse_print_search_tag(Parse *p,char *tag)
 {
     int res = 0;
     int i;
+    TIMER_START();
     for(i = 0; i < p->n_locs; ++i)
     {
         LocInfo *li = p->locs+i;
@@ -148,6 +157,11 @@ int parse_print_search_tag(Parse *p,char *tag)
             locinfo_print(li);
         }
     }
+    TIMER_END(locinfo_timer);
     return res;
 }
 
+double locinfo_time()
+{
+    return timer_elapsed(locinfo_timer);
+}

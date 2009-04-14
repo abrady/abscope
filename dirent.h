@@ -155,7 +155,8 @@ static struct dirent *
 readdir(
     DIR *dirp)
 {
-  assert (dirp != NULL);
+    if(!dirp)
+        return NULL;
 
   if (dirp->search_handle == INVALID_HANDLE_VALUE) {
     /* directory stream was opened/rewound incorrectly or it ended normally */
@@ -193,7 +194,8 @@ static int
 closedir(
     DIR *dirp)
 {
-  assert (dirp != NULL);
+    if(!dirp)
+        return 0;
  
   /* release search handle */
   if (dirp->search_handle != INVALID_HANDLE_VALUE) {

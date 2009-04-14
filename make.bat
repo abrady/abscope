@@ -9,7 +9,17 @@ bison c.y
 @REM /J : type char unsigned
 @REM /Wall, /we : warning level 4, warning as error
 
-cl /MTd /RTCscu /W4 /ZI Kernel32.lib abscope.c locinfo.c c_parse.c c.tab.c strs.c
+@REM /J : unsigned char
+@REM /ZI: debug info
+@REM /O2: maximize speed
+@REM /Og: global opt
+
+set INPUTS=Kernel32.lib abscope.c locinfo.c c_parse.c c.tab.c strs.c abutil.c
+set FLAGS=/O2
+@REM set FLAGS=/RTCscu /ZI
+cl /analyze /J /MTd /W4 %FLAGS% %INPUTS%
+
+
 @if NOT "%ERRORLEVEL%"=="0" goto error
 
 echo "done"

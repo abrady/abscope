@@ -117,7 +117,7 @@ ignored_stuff:
         ;
 
 function_definition:
-                type_decl TOK '(' function_args_opt ')' '{' /*{ printf("function def. ret(%s) fn(%s)\n", $2, $3); }*/
+                type_decl TOK '(' function_args_opt ')' '{' { c_add_func(ctxt, $2, @3.first_line); }
                 ;
 
 function_arg:   
@@ -143,8 +143,8 @@ struct_decl:    TYPEDEF STRUCT TOK '{' { c_add_struct(ctxt, $3, @3.first_line); 
 autocmd_decl:   AUTO_COMMAND
         ;
 
-%%  
-CParse *ctxt;
+%%
+// CParse *ctxt;
 int yylex (CParse *ctxt)
 {
     static struct { char *kw; int tok; } kws[] = {
@@ -160,14 +160,22 @@ int yylex (CParse *ctxt)
     int j;
     int newline;
     int first_line;
+    S64 timer_start = timer_get();
+
+//    S64 diff_getc   = timer_get();
+//#define GETC() (ctxt->getc_timing += timer_diff_reset(&diff_getc ), getc(ctxt->fp))
+#define GETC() getc(ctxt->fp)
+#define YYLEX_RETURN(VAL) do { ctxt->lex_timing += timer_diff(timer_start); return VAL; } while(0)
+
 // think of the gotos as a tail recursion, otherwise
 // every comment, preprocessor, etc. would push unnecessary
 // contxt onto the stack.
-yylex_start: 
+yylex_start:
+    *tok = 0;
     i = tok;
     first_line = yylloc.first_line = ctxt->parse_line;
     newline = 0;
-    while ((c = getc(ctxt->fp)) != EOF && isspace(c))
+    while ((c = GETC()) != EOF && isspace(c))
     {
         if(c == '\n')
         {
@@ -184,7 +192,7 @@ yylex_start:
         // if line ends with \, continue to eat.
         for(;;)
         {
-            while((c = getc(ctxt->fp)) != '\n' && c != EOF)
+            while((c = GETC()) != '\n' && c != EOF)
             {
                 if(!isspace(c))
                     last = c;
@@ -199,10 +207,10 @@ yylex_start:
     }
     else if(c == '/') // take care of comments
     {
-        c=getc(ctxt->fp);
+        c=GETC();
         if(c == '/')
         {
-            while((c = getc(ctxt->fp)) != '\n' && c != EOF)
+            while((c = GETC()) != '\n' && c != EOF)
                 ; // empty
             ungetc (c, ctxt->fp);
             goto yylex_start;
@@ -211,13 +219,13 @@ yylex_start:
         {
             for(;;)
             {
-                while((c = getc(ctxt->fp)) != '*' && c != EOF)
+                while((c = GETC()) != '*' && c != EOF)
                 {
                     if(c=='\n')
                         ctxt->parse_line++;
                 }
                     
-                if((c=getc(ctxt->fp)) == '/')
+                if((c=GETC()) == '/')
                     break;
                 ungetc(c, ctxt->fp);
             }
@@ -227,28 +235,28 @@ yylex_start:
     }
     else if(c == '\'')     // 'a', '\'', '\\'
     {
-        c = getc(ctxt->fp);
+        c = GETC();
         if(c == '\\')
-            c = getc(ctxt->fp);
+            c = GETC();
         yylval.num = c;
-        c = getc(ctxt->fp);
+        c = GETC();
         if(c != '\'')
             ungetc(c, ctxt->fp); // malformed, oh-well
-        return CHAR_LITERAL;
+        YYLEX_RETURN(CHAR_LITERAL);
     }
     else if(c == '"')
     {
-        while((c=getc(ctxt->fp)) != EOF)
+        while((c=GETC()) != EOF)
         {
             if(c == '\\') // \n, \t, \\, \<newline> etc.
             {
                 *i++ = c;
-                c = getc(ctxt->fp);
+                c = GETC();
                 while(c != EOF && c == ' ' || c == '\t' || c == '\r' || c == '\n')
                 {
                     if(c == '\n')
                         ctxt->parse_line++;
-                    c = getc(ctxt->fp);
+                    c = GETC();
                 }
 
                 if(c == EOF)
@@ -264,26 +272,26 @@ yylex_start:
         yylval.str = _strdup(tok);
         if(c != '"')
             ungetc(c,ctxt->fp);
-        return STR;
+        YYLEX_RETURN(STR);
     }
 
     // parse the token
 
     ungetc (c, ctxt->fp);
-    while(isalnum(c = getc(ctxt->fp)) || c == '_')
+    while(isalnum(c = GETC()) || c == '_')
         *i++ = c;
     *i = 0;
     if(!*tok) // no characters grabbed. return
-        return c == EOF?0:c;
+        YYLEX_RETURN(c == EOF?0:c);
     ungetc(c,ctxt->fp);
     //   @todo -AB: destructor :10/25/08 
     yylval.str = _strdup(tok);
     for(j = 0; j < sizeof(kws)/sizeof(*kws); ++j)
     {
         if(0 == strcmp(kws[j].kw,tok))
-            return kws[j].tok;
+            YYLEX_RETURN(kws[j].tok);
     }
-    return TOK;
+    YYLEX_RETURN(TOK);
 }
 
 void yyerror (CParse *ctxt, char const *s)
