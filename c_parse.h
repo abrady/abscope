@@ -17,9 +17,7 @@
 
 typedef struct CParse
 {
-    // gathered info
-    struct LocInfo *structs;
-    int       n_structs;
+    Parse structs;
 
     // state info
     FILE *fp;
@@ -32,16 +30,16 @@ typedef struct CParse
 // for parser
 // *************************************************************************
 
-void add_struct_decl(struct CParse *ctxt, char *struct_name);
+void c_add_struct(CParse *ctxt, char *struct_name, int line);
 
 // *************************************************************************
 // invocation
 // *************************************************************************
 int c_ext(char *file);
-int c_process_file(struct CParse *cp, char *fn);
-int c_on_processing_finished(struct CParse *cp);
+int c_parse_file(CParse *cp, char *fn);
+int c_on_processing_finished(CParse *cp);
 
-int c_load(struct CParse *cp);
+int c_load(CParse *cp);
 int c_findstructs(CParse *cp, char *sn);
 
 extern int c_debug;

@@ -9,8 +9,18 @@
 #ifndef STRS_H
 #define STRS_H
 
-int32_t strs_find_str(char **strs, int n_strs, char *s);
-int32_t strs_add_str(char ***pstrs, int *n_strs, char *s);
-int32_t strs_find_add_str(char ***pstrs, int *n_strs, char *s);
+char *strs_find_str(char **strs, int n_strs, char *s);
+char *strs_add_str(char ***pstrs, int *n_strs, char *s);
+char *strs_find_add_str(char ***pstrs, int *n_strs, char *s);
+
+typedef struct StrPool
+{
+    char *strs;
+    char *end;
+} StrPool;
+
+char *strpool_find_str(StrPool *pool, char *s);
+char *strpool_find_add_str(StrPool *pool, char *s);
+char *strpool_add_str(StrPool *pool, char *s);
 
 #endif //STRS_H

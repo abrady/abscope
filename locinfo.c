@@ -8,15 +8,23 @@
  ***************************************************************************/
 #include "locinfo.h"
 
-int absfile_write_locinfos(char *fn, struct LocInfo *infos, int n_infos)
+static void fixup_strs(Parse *p,char *old_base)
+{
+    int i;
+    for(i = 0; i < p->n_locs; ++i)
+    {
+        LocInfo *l = p->locs + i;
+        l->tag = p->pool.strs + (int)(l->tag - old_base);
+        l->context = p->pool.strs + (int)(l->context - old_base);
+        l->file = p->pool.strs + (int)(l->file - old_base);
+    }
+}
+
+
+int absfile_write_parse(char *fn, Parse *p)
 {
     FILE *fp;
-    int32_t n_strs = 0;
-    char **strs = 0;
-    FileLocInfo *finfos;
-    int strs_len;
-    int i;
-    
+    int32_t strs_len = 0;
     
     fp = absfile_open_write(fn);
     if(!fp)
@@ -25,118 +33,74 @@ int absfile_write_locinfos(char *fn, struct LocInfo *infos, int n_infos)
         return -1;
     }
     
-    finfos = malloc(sizeof(*finfos)*n_infos);
-    
-    strs_len = 0;
-    n_strs = 0;
-    for(i = 0; i < n_infos; ++i)
-    {
-        FileLocInfo *finfo = finfos+i;
-        LocInfo *info = infos+i;
-        
-        finfo->tok = strs_find_add_str(&strs,&n_strs,info->tok);
-        finfo->file = strs_find_add_str(&strs,&n_strs,info->file);        
-        finfo->line = info->line;
-    }
-    
-    for(i = 0; i < n_strs; ++i)
-        strs_len += strlen(strs[i]) + 1;
-    
     // write strings
-    fwrite(&n_strs,sizeof(n_strs),1,fp);
-    fwrite(&strs_len,sizeof(strs_len),1,fp);
-    for(i = 0; i < n_strs; ++i)
-    {
-        int len = strlen(strs[i])+1;
-        fwrite(strs[i],len,1,fp);
-    }
+    strs_len = p->pool.end - p->pool.strs;          
+    fwrite(&p->pool.strs,sizeof(p->pool.strs),1,fp); // 1. write start ptr
+    fwrite(&strs_len,sizeof(strs_len),1,fp);     // 2. mem block size
+    fwrite(p->pool.strs,strs_len,1,fp);            // 3. data
     
     // write infos
-    fwrite(&n_infos,sizeof(n_infos),1,fp);
-    fwrite(finfos,sizeof(FileLocInfo),n_infos,fp);
+    fwrite(&p->n_locs,sizeof(p->n_locs),1,fp);
+    fwrite(p->locs,sizeof(*p->locs),p->n_locs,fp);
     
-    free(strs);
-    free(finfos);
     fclose(fp);
     return 0;
 }
 
-int absfile_read_locinfos(char *fn, struct LocInfo **pinfos, int *pn_infos)
+int absfile_read_parse(char *fn, Parse *p)
 {
     int res = 0;
     int nread;
-    char *p;
-    char *strdata;
-    char **strs;
+    char *pool_base;
     int32_t strdata_len = 0;
-    int32_t n_strs = 0;
     FILE *fp = absfile_open_read(fn);
-    int i;
-    FileLocInfo *finfos = 0;
     
-    if(!fp)
+    if(!fp || !p)
     {
         fprintf(stderr,"couldn't open file %s to read locinfos\n",fn);
         return -1;
     }
-    fread(&n_strs,sizeof(n_strs),1,fp);
-    fread(&strdata_len,sizeof(strdata_len),1,fp);
-    if(!n_strs || !strdata_len)
+
+    // read the string data
+    fread(&pool_base,sizeof(pool_base),1,fp);             // 1. pointer
+    fread(&strdata_len,sizeof(strdata_len),1,fp); // 2. data len
+
+    if(!pool_base || !strdata_len)
     {
-        fprintf(stderr,"unable to read number strs %i or data len %i",n_strs,strdata_len);
+        fprintf(stderr,"unable to read pool_base pointer %p or data len %i",pool_base,strdata_len);
         return -2;
     }
     
-    // read the string data
-    strdata = malloc(strdata_len);
-    strs = malloc(sizeof(*strs)*n_strs);
-    fread(strdata,strdata_len,1,fp);
-    p = strdata;
-    for(i = 0;i < n_strs;++i)
-    {
-        char *pt;
-        strs[i] = p;
-        pt = strchr(p,0);
-        if(!pt)
-        {
-            fprintf(stderr,"couldn't advance to next string at element %i, previous string %s",i,p);
-            res = -3;
-            goto cleanup;
-        }
-        p = pt + 1;
-    }
+    p->pool.strs = realloc(p->pool.strs,strdata_len);
+    p->pool.end  = p->pool.strs + strdata_len;
+    fread(p->pool.strs,strdata_len,1,fp);           // 3. data
     
     // read the on-file location info
-    fread(pn_infos,sizeof(*pn_infos),1,fp);
-    finfos = malloc(sizeof(*finfos)*(*pn_infos));
-    nread  = fread(finfos,sizeof(*finfos),(*pn_infos),fp);
-    if(nread != *pn_infos)
+    fread(&p->n_locs,sizeof(p->n_locs),1,fp);
+    p->locs = realloc(p->locs,sizeof(*p->locs)*p->n_locs);
+    nread  = fread(p->locs,sizeof(*p->locs),p->n_locs,fp);
+    if(nread != p->n_locs)
     {
-        fprintf(stderr,"read %i infos, expected %i",nread,*pn_infos);
+        fprintf(stderr,"read %i infos, expected %i",nread,p->n_locs);
         res = -4;
         goto cleanup;
         
     }
-    
-    *pinfos = realloc(*pinfos,sizeof(**pinfos)*(*pn_infos));
-    for(i = 0; i < *pn_infos; ++i)
-    {
-        FileLocInfo *finfo = finfos + i;
-        LocInfo *info = (*pinfos)+i;
-        info->line = finfo->line;
-        info->tok = strs[finfo->tok];
-        info->file = strs[finfo->file];
-    }
+    fixup_strs(p,pool_base);
     
 cleanup:
-    free(finfos);
-    free(strs);
     return res;
 }
 
+void locinfo_print(LocInfo *li)
+{
+    printf("** [[file:%s::%i]] %s", li->file, li->line, li->tag, li->context?li->context:"");
+}
+
+
 int locinfo_vprintf(LocInfo *li,char *fmt,va_list args)
 {
-    printf("** [[file:%s::%i]] %s", li->file, li->line, "(context)");
+    locinfo_print(li);
     return vprintf(fmt,args);
 }
 
@@ -149,3 +113,41 @@ int locinfo_printf(LocInfo *li,char *fmt,...)
     va_end(vl);
     return r;
 }
+
+static char* parse_find_add_str(Parse *p, char *s)
+{
+    char *old_base = p->pool.strs;
+    char *r = strpool_find_add_str(&p->pool,s);
+    if(p->pool.strs != s)   // if we realloc'd, fixup.
+        fixup_strs(p,old_base);
+    return r;
+}
+
+void parse_add_locinfo(Parse *p,char *tag, char *context, char *filename, int line)
+{
+    LocInfo *l;
+    p->locs    = realloc(p->locs,sizeof(*p->locs)*(++p->n_locs));
+    l          = p->locs+p->n_locs-1;
+    l->tag     = parse_find_add_str(p,tag);
+    l->context = parse_find_add_str(p,context);
+    l->file    = parse_find_add_str(p,filename);
+    l->line    = line;
+}
+
+
+int parse_print_search_tag(Parse *p,char *tag)
+{
+    int res = 0;
+    int i;
+    for(i = 0; i < p->n_locs; ++i)
+    {
+        LocInfo *li = p->locs+i;
+        if(0 == strcmp(tag,li->tag))
+        {
+            res++;
+            locinfo_print(li);
+        }
+    }
+    return res;
+}
+
