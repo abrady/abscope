@@ -7,63 +7,8 @@
  *
  ***************************************************************************/
 #include "abscope.h"
-#include "dirent.h"
 #include "c_parse.h"
 #include "c.tab.h"
-
-int file_exists(char *fname)
-{
-	struct stat status;
-	if(!stat(fname, &status) && status.st_mode & _S_IFREG)
-        return 1;
-	return 0;
-}
-
-typedef struct DirScan
-{
-    char **files;
-    int n_files;
-} DirScan;
-
-int match_ext(char *fn, char *ext)
-{
-    char *fne = strrchr(fn,'.');
-    return fne && 0 == strcmp(fne+1,ext);
-}
-
-/* scan a directory (recursively?) for source files */
-static void
-scan_dir(DirScan *d, const char *adir, BOOL recurse_dir)
-{
-	DIR	*dirfile;
-	int adir_len = strlen(adir);
-    
-	if ((dirfile = opendir(adir)) != NULL) {
-		struct dirent *entry;
-		char	path[MAX_PATH + 1];
-		char	*file;
-        
-		while ((entry = readdir(dirfile)) != NULL)
-        { 
-            struct stat buf;
-			if(!strcmp(".",entry->d_name) || !strcmp("..",entry->d_name))
-                continue;
-                
-            sprintf(path,"%s/%.*s", adir, MAX_PATH-2-adir_len, entry->d_name);
-                
-            if (stat(path,&buf) != 0)
-                continue;
-                    
-            file = entry->d_name;
-            if (recurse_dir && S_ISDIR(buf.st_mode) )
-                scan_dir(d, path, recurse_dir);
-            else if (c_ext(path) && _access(path, R_OK) == 0)
-                strs_find_add_str(&d->files,&d->n_files,_strdup(path));
-		}
-		closedir(dirfile);
-	}
-    return;
-}
 
 static void usage(int argc, char**argv)
 {
@@ -71,23 +16,19 @@ static void usage(int argc, char**argv)
     printf("usage: %s <filename>\n",argv[0]);
     printf("processing options:\n"
            "-p\t\t: process the passed file\n"
-           "-T    : run tests"
-           "-D    : parse in debug mode"
+           "-T    : run tests\n"
+           "-D[pt]: debug (p)arse, (t)iming "
+           "-Q[qf]: query for (s)tructs, (f)unctions"
 #ifdef _DEBUG
            "-Z    : wait for debugger attach"
 #endif
         );
 }
 
-char* downcase(char *str)
+BOOL dirscan_accept_file(char *path, void *ignored)
 {
-    char *p = str;
-    while(*str)
-    {
-        *str = (char)tolower(*str); 
-        str++;
-    }
-    return p;
+    ignored;
+    return c_ext(path);
 }
 
 static int32_t ABS_FILE_VERSION = 0x20090326;
@@ -194,7 +135,7 @@ static int abscope_test()
     TEST(0==test_locinfo());
     
     printf("scanning ./test...");
-    scan_dir(&dir_scan,"./test",1);
+    scan_dir(&dir_scan,"./test",1,&dirscan_accept_file,NULL);
     printf("done.\n");
 
     printf("found %i files:\n",dir_scan.n_files);
@@ -214,19 +155,14 @@ static int abscope_test()
     return 0;
 }
 
-typedef enum CQueryFlag
-{
-    CQueryFlag_None = 0,
-    CQueryFlag_Struct = 1<<1,
-    CQueryFlag_Func   = 2<<1,
-} CQueryFlag;
-
 static CParse g_cp;
 
 int main(int argc, char **argv)
 {
+    int res = 0;
+    int print_timers = 0;
+    S64 timer_start;
     DirScan dir_scan = {0};
-    int interactive = 0;
     int i;
     struct CParse *cp = &g_cp;
     int process = 0;
@@ -234,9 +170,9 @@ int main(int argc, char **argv)
     char *query_str = 0;
 
     if(argc < 2)
-    {
-        return 1;
-    }
+        return -1;
+
+    timer_start = timer_get();
 
     for(i = 1; i < argc; ++i)
     {
@@ -255,7 +191,22 @@ int main(int argc, char **argv)
                 break;
 #endif
             case 'D':
-                c_debug = 1;
+                while(*a && !isspace(*a))
+                {
+                    switch(*a)
+                    {
+                    case 'p':
+                        c_debug = 1;
+                        break;
+                    case 't':
+                        print_timers = 1;
+                        break;
+                    default:
+                        printf("unrecognized switch %d\n",*a);
+                        break;
+                    };
+                    a++;
+                };
                 break;
             case 'p':   // add a file to process
                 strs_find_add_str(&dir_scan.files,&dir_scan.n_files,argv[++i]);
@@ -263,19 +214,26 @@ int main(int argc, char **argv)
                 break;
             case 'Q':               // Query for something 
                 query_str = argv[++i];
-                switch(*a++)
+                while(!isspace(*a))
                 {
-                case 's':
-                    c_query_flags |= CQueryFlag_Struct;
-                    break;
-                default:
-                    fprintf(stderr, "unknown query option %c in %s\n",*(a-1), argv[i]);
-                    return -1;
-                };
+                    switch(*a)
+                    {
+                    case 's':
+                        c_query_flags |= CQueryFlag_Struct;
+                        break;
+                    case 'f':
+                        c_query_flags |= CQueryFlag_Func;
+                        break;
+                    default:
+                        fprintf(stderr, "unknown query option %c in %s\n",*(a-1), argv[i]);
+                        return -1;
+                    };
+                    a++;
+                }                
                 break;
             case 'R':
                 i++;
-                scan_dir(&dir_scan,argv[i]?argv[i]:".",1);
+                scan_dir(&dir_scan,(argv[i] && *argv[i] != '-')?argv[i]:".",1,dirscan_accept_file,NULL);
                 process = 1;
                 break;
             case 'T':
@@ -299,8 +257,13 @@ int main(int argc, char **argv)
 
     if(process)
     {
-        int res = 0;
         printf("processing %i files\n", dir_scan.n_files);
+        if(print_timers)
+        {
+            printf("scanning took %f seconds\n", timer_diffelapsed(timer_start));
+            timer_start = timer_get();
+        }
+        
         for(i = 0; i < dir_scan.n_files; ++i)
         {
             char *fn = dir_scan.files[i];
@@ -309,29 +272,28 @@ int main(int argc, char **argv)
         }
         
         res += c_on_processing_finished(cp);
-        return res;
+        goto end;
     }
     
 
     if(query_str)
     {
         if(c_load(cp)<0)
-            return -1;    
-        if(c_query_flags) {
-            if(c_query_flags & CQueryFlag_Struct)
-                c_findstructs(cp,query_str);
-        }
-        else if(interactive){
-            int c = getchar();
-            char s[128];
-            switch(c){
-            case 's':
-                puts("enter struct to search for:");
-                gets(s);
-                printf("searching for %s:\n",s);
-                c_findstructs(cp,s);
-            };
-        }
-    }    
-    return 0;
+            return -1;
+        res = c_query(cp,query_str,c_query_flags);
+        goto end;
+    }
+    
+end:
+    if(print_timers)
+    {
+        printf("process took %f\n"
+               "queries took %f\n"
+               "allocs took %f seconds\n", 
+               timer_diffelapsed(timer_start), 
+               locinfo_time(),
+               alloc_time());
+        c_parse_print_time(cp);
+    }
+    return res;
 }
