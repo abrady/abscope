@@ -20,6 +20,12 @@ typedef struct LocInfo
     int line;
 } LocInfo;
 
+typedef struct TagRef
+{
+    char *tag;
+    LocInfo *locs;
+} TagRef;
+
 typedef struct Parse
 {
     struct LocInfo *locs;
@@ -33,7 +39,7 @@ int absfile_read_parse(char *fn, Parse *p);
 int locinfo_vprintf(LocInfo *li,char *fmt,va_list args);
 int locinfo_printf(LocInfo *li,char *fmt,...);
 
-void parse_add_locinfo(Parse *p,char *tag, char *context, char *filename, int line);
+LocInfo *parse_add_locinfo(Parse *p,char *tag, char *context, char *filename, int line);
 int parse_print_search_tag(Parse *p,char *tag);
 
 double locinfo_time();

@@ -15,8 +15,8 @@ bison c.y
 @REM /Og: global opt
 
 set INPUTS=Kernel32.lib abscope.c locinfo.c c_parse.c c.tab.c strs.c abutil.c
-set FLAGS=/O2
-@REM set FLAGS=/RTCscu /ZI
+@REM set FLAGS=/O2
+set FLAGS=/RTCscu /ZI
 cl /analyze /J /MTd /W4 %FLAGS% %INPUTS%
 
 
