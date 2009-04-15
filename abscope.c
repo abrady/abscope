@@ -18,7 +18,7 @@ static void usage(int argc, char**argv)
            "-p\t\t: process the passed file\n"
            "-T    : run tests\n"
            "-D[pt]: debug (p)arse, (t)iming "
-           "-Q[qf]: query for (s)tructs, (f)unctions"
+           "-Q[qrf]: query for (s)tructs, struct(r)efs (f)unctions"
 #ifdef _DEBUG
            "-Z    : wait for debugger attach"
 #endif
@@ -214,18 +214,21 @@ int main(int argc, char **argv)
                 break;
             case 'Q':               // Query for something 
                 query_str = argv[++i];
-                while(!isspace(*a))
+                while(*a && !isspace(*a))
                 {
                     switch(*a)
                     {
                     case 's':
-                        c_query_flags |= CQueryFlag_Struct;
+                        c_query_flags |= CQueryFlag_Structs;
+                        break;
+                    case 'r':
+                        c_query_flags |= CQueryFlag_Structrefs;
                         break;
                     case 'f':
-                        c_query_flags |= CQueryFlag_Func;
+                        c_query_flags |= CQueryFlag_Funcs;
                         break;
                     default:
-                        fprintf(stderr, "unknown query option %c in %s\n",*(a-1), argv[i]);
+                        fprintf(stderr, "unknown query option %c in %s\n",*a, argv[i-1]);
                         return -1;
                     };
                     a++;

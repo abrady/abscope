@@ -1,7 +1,11 @@
+%{
+//typedef struct 
+%}
+
 %union
- {
-     char *str;
-     int num;
+{
+   char *str;
+   int num;
 }
 
 %{
@@ -30,7 +34,7 @@
     {
         printf("meta_done\n");
     }
-    char *tok_append(char*a,char *b);
+static char *tok_append(char*a,char *b);
 
 static void print_token_value (FILE *, int, YYSTYPE);
 #define YYPRINT(file, type, value) print_token_value (file, type, value)
@@ -131,13 +135,27 @@ function_args_opt:
                 ;
 
 type_decl:
-                TOK { $$ = $1; }
-        |       type_decl  '*' {$$ = tok_append($1,"*"); }
+                TOK            { $$ = $1; }
+        |       type_decl  '*' { $$ = $1; }
                 ;
 
 
-struct_decl:    TYPEDEF STRUCT TOK '{' { c_add_struct(ctxt, $3, @3.first_line); }
+struct_decl:    TYPEDEF STRUCT TOK '{' struct_body { c_add_struct(ctxt, $3, @3.first_line); }
+        ;
 
+struct_body:    struct_mbrs '}'
+        ;
+
+struct_mbrs:    var_decl
+        |       struct_mbrs var_decl
+        ;
+
+var_decl: type_decl var_decl_names { c_add_structref(ctxt, $1, @1.first_line); }
+        ;
+
+var_decl_names:  TOK ';'
+        |       TOK ',' var_decl_names ';'
+        |       var_decl_names error ';'
         ;
 
 autocmd_decl:   AUTO_COMMAND
@@ -299,7 +317,7 @@ void yyerror (CParse *ctxt, char const *s)
     _snprintf(ctxt->parse_error, DIMOF(ctxt->parse_error), "%s(%i): %s\n", ctxt->parse_file, ctxt->parse_line, s);
 }
 
-char *tok_append(char *a,char *b)
+static char *tok_append(char *a,char *b)
 {
     char *res;
     int na = strlen(a);

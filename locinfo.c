@@ -16,9 +16,9 @@ static void fixup_strs(Parse *p,char *old_base)
     for(i = 0; i < p->n_locs; ++i)
     {
         LocInfo *l = p->locs + i;
-        l->tag = p->pool.strs + (int)(l->tag - old_base);
-        l->context = p->pool.strs + (int)(l->context - old_base);
-        l->file = p->pool.strs + (int)(l->file - old_base);
+        l->tag = l->tag?(p->pool.strs + (int)(l->tag - old_base)):NULL;
+        l->context = l->context?(p->pool.strs + (int)(l->context - old_base)):NULL;
+        l->file = l->file?(p->pool.strs + (int)(l->file - old_base)):NULL;
     }
 }
 
@@ -102,7 +102,7 @@ cleanup:
 
 void locinfo_print(LocInfo *li)
 {
-    printf("** [[file:%s::%i]] %s\n%s", li->file, li->line, li->tag, li->context?li->context:"");
+    printf("** [[file:%s::%i]] %s: (%s)\n", li->file, li->line, li->tag, li->context?li->context:"");
 }
 
 
@@ -131,7 +131,7 @@ static char* parse_find_add_str(Parse *p, char *s)
     return r;
 }
 
-void parse_add_locinfo(Parse *p,char *tag, char *context, char *filename, int line)
+LocInfo *parse_add_locinfo(Parse *p,char *tag, char *context, char *filename, int line)
 {
     LocInfo *l;
     p->locs    = realloc(p->locs,sizeof(*p->locs)*(++p->n_locs));
@@ -140,6 +140,7 @@ void parse_add_locinfo(Parse *p,char *tag, char *context, char *filename, int li
     l->context = parse_find_add_str(p,context);
     l->file    = parse_find_add_str(p,filename);
     l->line    = line;
+    return l;
 }
 
 

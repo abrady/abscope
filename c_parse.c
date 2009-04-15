@@ -16,8 +16,22 @@ extern int c_debug;
 
 void c_add_struct(CParse *ctxt, char *struct_name, int line)
 {
-    parse_add_locinfo(&ctxt->structs,struct_name,NULL,ctxt->parse_file,line);
+    LocInfo *l = parse_add_locinfo(&ctxt->structs,struct_name,ctxt->parse_context,ctxt->parse_file,line);
+    if(!l)
+        return;
+    ctxt->parse_context = l->tag;
 }
+
+void c_add_structref(CParse *ctxt, char *struct_name, int line)
+{
+    parse_add_locinfo(&ctxt->structrefs,struct_name,ctxt->parse_context,ctxt->parse_file,line);
+}
+
+void c_add_func(CParse *ctxt, char *name, int line)
+{
+    parse_add_locinfo(&ctxt->funcs,name,ctxt->parse_context,ctxt->parse_file,line);
+}
+
 
 int c_parse_file(CParse *cp, char *fn)
 {
@@ -46,6 +60,9 @@ int c_on_processing_finished(CParse *cp)
     printf("%i structs\n",cp->structs.n_locs);
     res += absfile_write_parse("c_structs.abs",&cp->structs);
 
+    printf("%i structrefs\n",cp->structrefs.n_locs);
+    res += absfile_write_parse("c_structrefs.abs",&cp->structrefs);
+
     printf("%i funcs\n",cp->funcs.n_locs);
     res += absfile_write_parse("c_funcs.abs",&cp->funcs);
 
@@ -57,6 +74,10 @@ int c_load(CParse *cp)
     int res = 0;
     if(file_exists("c_structs.abs"))
         res += absfile_read_parse("c_structs.abs",&cp->structs);
+    if(file_exists("c_funcs.abs"))
+        res += absfile_read_parse("c_funcs.abs",&cp->funcs);
+    if(file_exists("c_structrefs.abs"))
+        res += absfile_read_parse("c_structrefs.abs",&cp->structrefs);
     return res;
 }
 
@@ -68,15 +89,9 @@ int c_findstructs(CParse *cp, char *sn)
     return parse_print_search_tag(&cp->structs,sn);
 }
 
-int c_ext(char *file)
+int c_findstructrefs(CParse *cp, char *sn)
 {
-    return match_ext(file,"c")
-        || match_ext(file,"h");
-}
-
-void c_add_func(CParse *ctxt, char *name, int line)
-{
-    parse_add_locinfo(&ctxt->funcs,name,NULL,ctxt->parse_file,line);
+    return parse_print_search_tag(&cp->structrefs,sn);
 }
 
 int c_findfuncs(CParse *cp, char *name)
@@ -87,9 +102,11 @@ int c_findfuncs(CParse *cp, char *name)
 int c_query(CParse *cp, char *tag, int query_flags)
 {
     int res = 0;
-    if(query_flags & CQueryFlag_Struct)
+    if(query_flags & CQueryFlag_Structs)
         res += c_findstructs(cp,tag);
-    if(query_flags & CQueryFlag_Func)
+    if(query_flags & CQueryFlag_Structrefs)
+        res += c_findstructrefs(cp,tag);
+    if(query_flags & CQueryFlag_Funcs)
         res += c_findfuncs(cp,tag);
     return res;
 }
@@ -100,4 +117,10 @@ void c_parse_print_time(CParse *cp)
            "getc took %f\n",
            timer_elapsed(cp->lex_timing), 
            timer_elapsed(cp->getc_timing));
+}
+
+int c_ext(char *file)
+{
+    return match_ext(file,"c")
+        || match_ext(file,"h");
 }
