@@ -1,4 +1,4 @@
-;;
+;; ;;
 ;; process-buffer : the buffer for a process
 ;; process-mark   : 
 (setq abscope-dir "c:/src")
