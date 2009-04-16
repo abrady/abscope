@@ -154,8 +154,8 @@ struct_mbrs:    var_decl
 var_decl: type_decl var_decl_names { c_add_structref(ctxt, $1, @1.first_line); }
         ;
 
-var_decl_names:  TOK ';'
-        |       TOK ',' var_decl_names ';'
+var_decl_names: TOK ';'
+        |       TOK ',' var_decl_names
         |       var_decl_names error ';'
         ;
 
