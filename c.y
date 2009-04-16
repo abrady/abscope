@@ -132,6 +132,7 @@ function_args_opt:
                 /*empty*/ //{ printf("no args. "); }
         |       function_arg ',' function_args_opt //{ printf(","); }
         |       function_arg
+        |       function_arg error ','
                 ;
 
 type_decl:
