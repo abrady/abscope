@@ -22,5 +22,6 @@ typedef struct StrPool
 char *strpool_find_str(StrPool *pool, char *s);
 char *strpool_find_add_str(StrPool *pool, char *s);
 char *strpool_add_str(StrPool *pool, char *s);
+void strpool_cleanup(StrPool *p);
 
 #endif //STRS_H

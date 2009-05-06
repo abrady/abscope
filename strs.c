@@ -77,3 +77,8 @@ char *strpool_add_str(StrPool *pool, char *s)
     pool->end += n_s;
     return r;
 }
+
+void strpool_cleanup(StrPool *p)
+{
+    free(p->strs);
+}

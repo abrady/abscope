@@ -18,8 +18,10 @@
 typedef struct CParse
 {
     Parse structs;
-    Parse funcs;
     Parse structrefs;
+
+    Parse funcs;
+    Parse funcrefs;
 
     // state info
     FILE *fp;

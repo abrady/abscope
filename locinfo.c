@@ -131,6 +131,8 @@ static char* parse_find_add_str(Parse *p, char *s)
     return r;
 }
 
+
+
 LocInfo *parse_add_locinfo(Parse *p,char *tag, char *context, char *filename, int line)
 {
     LocInfo *l;
@@ -165,4 +167,19 @@ int parse_print_search_tag(Parse *p,char *tag)
 double locinfo_time()
 {
     return timer_elapsed(locinfo_timer);
+}
+
+void parse_copy_parse(Parse *dst, Parse *src)
+{
+    int i;
+    if(!dst || !src)
+        return;
+    for(i = 0; i < src->n_locs; ++i)
+        parse_add_locinfo(dst,src->locs[i].tag,src->locs[i].context,src->locs[i].file,src->locs[i].line);
+}
+
+void parse_cleanup(Parse *p)
+{
+    free(p->locs);
+    strpool_cleanup(&p->pool);
 }

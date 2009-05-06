@@ -1,12 +1,14 @@
-void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )
-{
-}
-
 typedef struct Foo
 {
     int a;
     char *b;
 } Asdf;
+
+void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )
+{
+    int a;
+    Foo b;
+}
 
 typedef struct Bar
 {

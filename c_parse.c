@@ -27,7 +27,12 @@ void c_add_structref(CParse *ctxt, char *referred_to, char *referrer, int line)
 
 void c_add_func(CParse *ctxt, char *name, int line)
 {
-    parse_add_locinfo(&ctxt->funcs,name,ctxt->parse_context,ctxt->parse_file,line);
+    parse_add_locinfo(&ctxt->funcs,name,"",ctxt->parse_file,line);
+}
+
+void c_add_funcref(CParse *ctxt, char *referred_to, char *referrer, int line)
+{
+    parse_add_locinfo(&ctxt->funcrefs,referred_to,referrer,ctxt->parse_file,line);
 }
 
 
@@ -130,10 +135,6 @@ int c_ext(char *file)
 typedef enum c_tokentype 
 {
     PARSE_ERROR = 256,
-    TYPEDEF,
-    EXTERN,
-    STATIC,
-    STRUCT,
     AUTO_COMMAND,
     CHAR_LITERAL,
     TOK,
@@ -141,7 +142,67 @@ typedef enum c_tokentype
     VAR_DECL,
     VAR_DECL_LIST,
     ARGLIST,
+    
+    // c keywords
+    TYPEDEF,
+    EXTERN,
+    STATIC,
+    AUTO,
+    REGISTER,
+    CHAR_TOK,
+    SHORT_TOK,
+    INT_TOK,
+    LONG_TOK,
+    SIGNED,
+    UNSIGNED,
+    FLOAT_TOK,
+    DOUBLE,
+//     CONST,
+//     VOLATILE,
+    VOID_TOK,
+    STRUCT,
+    UNION,
+    ENUM,
+    ELLIPSIS,
+    CASE,
+    DEFAULT,
+    IF,
+    ELSE,
+    SWITCH,
+    WHILE,
+    DO,
+    FOR,
+    GOTO,
+    CONTINUE,
+    BREAK,
+    RETURN,
+//    CONSTANT,
+    SIZEOF,
+    PTR_OP,
+    INC_OP,
+    DEC_OP,
+    LEFT_OP,
+    RIGHT_OP,
+    LE_OP,
+    GE_OP,
+    EQ_OP,
+    NE_OP,
+    AND_OP,
+    OR_OP,
+    MUL_ASSIGN,
+    DIV_ASSIGN,
+    MOD_ASSIGN,
+    ADD_ASSIGN,
+    SUB_ASSIGN,
+    LEFT_ASSIGN,
+    RIGHT_ASSIGN,
+    AND_ASSIGN,
+    XOR_ASSIGN,
+    OR_ASSIGN,
+    TYPE_NAME,
 } c_tokentype;
+#define C_KWS_START TYPEDEF
+
 
 typedef enum c_vartypee {
     VT_NONE,
@@ -180,6 +241,7 @@ typedef struct StackElt
             char **s;
             int n;
         } strs;
+        Parse locs;
     } l;
     c_tokentype tok;
     int line;
@@ -205,33 +267,20 @@ static int parse_error(CParse *ctxt, StackElt *s, char *fmt,...)
 int c_debug;
 int c_lex(CParse *ctxt, StackElt *top);
 
-#define MAX_LOOKAHEAD 12 // arbitrary
 #define STACK(OFFSET) (stack+n_stack-1+OFFSET)
 #define PREV_TOKS2(A,B) ((n_stack >= 4) && STACK(-2)->tok == A && STACK(-1)->tok == B)
 #define PREV_TOKS3(A,B,C) ((n_stack >= 4) && STACK(-3)->tok == A && STACK(-2)->tok == B && STACK(-1)->tok == C)
-#define POP(N) n_stack -= N
 #define TOP (stack + n_stack - 1)
 
 #define PUSH() ((stack = realloc(stack,sizeof(*stack)*(++n_stack))),ZeroStruct(TOP))
-
-#define PUSH2()       \
-if(n_stack > MAX_LOOKAHEAD)                 \
-{                                                                   \
-    int n = n_stack - MAX_LOOKAHEAD;                                \
-    memmove(stack,stack+n,MAX_LOOKAHEAD*sizeof(*stack));            \
-    n_stack = MAX_LOOKAHEAD;                                        \
-}                                                                   \
-else                                                                \
-{                                                                   \
-        stack = realloc(stack,sizeof(*stack)*(++n_stack));          \
-}
-
 
 #define NEXT_TOK()                                                   \
     PUSH();                                                          \
     TOP->tok=c_lex(ctxt,TOP);                                        \
     if(!TOP->tok)                                                    \
         break;
+
+#define BP(I) (&stack[stack_start+(I)])    
 
 // pushes all refs and reflist into a single reflist and puts it at 
 // location 'start' 
@@ -262,66 +311,6 @@ static void reduce_reflist(int start, StackElt **pstack, int *pn_stack)
         n_stack--;
     }
     *TOP = res;
-    *pn_stack = n_stack;
-    *pstack = stack;
-}
-
-static void reduce_vardecl(CParse *ctxt, Parse *refs, StackElt **pstack, int *pn_stack)
-{
-    StackElt *t;
-    StackElt *stack = *pstack;
-    int n_stack = *pn_stack;
-    int n_start = n_stack; // reduce to here
-    StackElt res = {0};
-    refs;
-    res.tok = VAR_DECL;
-    do
-    {
-        NEXT_TOK();
-        switch(TOP->tok)
-        {
-        case TOK:
-            break;
-        case ';':
-            t = stack + n_start-1;
-            if(t->tok != TOK)
-            {
-                TOK_ERROR(t,"unable to get struct name");
-                res.tok = PARSE_ERROR;
-                n_stack = n_start;
-                break;
-            }
-            strcpy(res.l.str,t->l.str);
-            n_stack = n_start; // done
-            break;
-        };
-    } while(n_stack > n_start);
-    *TOP = res;
-    *pn_stack = n_stack;
-    *pstack = stack;
-}
-
-
-static void parse_struct_body(CParse *ctxt, StackElt **pstack, int *pn_stack)
-{
-    StackElt *stack = *pstack;
-    int n_stack = *pn_stack;
-    int stack_start = n_stack; // can't reduce past ths
-    do
-    {
-        NEXT_TOK();
-        switch(TOP->tok)
-        {
-        case TOK:
-            reduce_vardecl(ctxt, &ctxt->structrefs,&stack,&n_stack);
-            break;
-        case '}':
-            POP(1);
-            reduce_reflist(stack_start,&stack,&n_stack);
-            n_stack = stack_start;
-            break;
-        };
-    } while(stack_start < n_stack);
     *pn_stack = n_stack;
     *pstack = stack;
 }
@@ -365,40 +354,72 @@ static void parse_arglist(CParse *ctxt, StackElt **pstack, int *pn_stack)
     *pstack = stack;    
 }
 
-static void parse_func_body(CParse *ctxt, StackElt **pstack, int *pn_stack)
+static void parse_body(CParse *ctxt, Parse *res, StackElt **pstack, int *pn_stack, char *parent_ctxt)
 {
     StackElt *stack = *pstack;
     int n_stack = *pn_stack;
     int stack_start = n_stack; // can't reduce past ths
+    int can_see_decls = 1;
+    int done = 0;
+    int advance_to_semi = 0;
     do
     {
         NEXT_TOK();
+
+        if(advance_to_semi)
+        {
+            while(TOP->tok && TOP->tok != ';' && TOP->tok != '}')
+            {
+                NEXT_TOK();
+            }
+            n_stack = stack_start; // reduce
+            advance_to_semi = 0;
+            NEXT_TOK();
+        }
+        
         switch(TOP->tok)
         {
         case '(':
-            parse_arglist(ctxt,&stack,&n_stack); // recurse
+            parse_arglist(ctxt,&stack,&n_stack);
             break;
-        case TOK:
-            reduce_vardecl(ctxt, &ctxt->structrefs,&stack,&n_stack);
+        case '{':
+            parse_body(ctxt,res,&stack,&n_stack,parent_ctxt); // recurse
+            parse_cleanup(&TOP->l.locs);
+            break;
+        case '*':
+            break;
+        case CHAR_TOK:
+        case SHORT_TOK:
+        case INT_TOK:
+        case LONG_TOK:
+        case SIGNED:
+        case UNSIGNED:
+        case FLOAT_TOK:
+        case DOUBLE:
+        case VOID_TOK: 
+//            advance_to_semi = 1; actually, let's keep decls
             break;
         case ';':
-            //if(PREV_TOK2(
-            //POP_TO(last_open_brace);
-            break;
-        case '}':
+            if(can_see_decls)
+                parse_add_locinfo(res,BP(0)->l.str, parent_ctxt, ctxt->parse_file, BP(0)->line);
             n_stack = stack_start;
             break;
+        case '}':
+            done = 1;
+            break;
+        default:
+            if(TOP->tok >= C_KWS_START)
+                can_see_decls = 0;
         };
-    } while(stack_start < n_stack);
-    *pn_stack = n_stack;
+    } while(!done);
+    *pn_stack = stack_start;
     *pstack = stack;
 }
 
 
 int c_parse(CParse *ctxt)
 {
-    int i;
-    char *str;
+    char str[32];
     StackElt *stack=NULL;
     int n_stack = 0;
     int res = 0;
@@ -411,19 +432,18 @@ int c_parse(CParse *ctxt)
         case '{':
             if(PREV_TOKS3(TYPEDEF,STRUCT, TOK)) // struct decl
             {
-                parse_struct_body(ctxt,&stack,&n_stack);
-                str = TOP[-1].l.str;
+                strcpy(str,TOP[-1].l.str);
                 c_add_struct(ctxt,str,TOP->line);
-                for(i = 0; i < TOP->l.strs.n; ++i)
-                    c_add_structref(ctxt,TOP->l.strs.s[i],str,TOP[-1].line);
-                POP(4);    
+                parse_body(ctxt,&ctxt->structrefs,&stack,&n_stack,str);
+                n_stack = 0;
             }
             else if(PREV_TOKS2(TOK,ARGLIST)) // function def
             {
-                str = STACK(-2)->l.str;
+                strcpy(str,TOP[-2].l.str);
                 c_add_func(ctxt,str,STACK(-2)->line);
-                parse_func_body(ctxt,str,&stack,&n_stack);
-                POP(3);
+                parse_body(ctxt,&ctxt->funcrefs,&stack,&n_stack,str);
+                // todo: cleanup arglist
+                n_stack = 0;
             }
             break;
         case '(':
@@ -440,13 +460,63 @@ int c_parse(CParse *ctxt)
 int c_lex(CParse *ctxt, StackElt *top)
 {
     static const struct { char *kw; int tok; } kws[] = {
-        { "typedef",           TYPEDEF },
-        { "extern",            EXTERN },
-        { "static",            STATIC },
-        { "struct",            STRUCT },
         { "AUTO_COMMAND",      AUTO_COMMAND },
 //        { "NOCONST",           NOCONST_DECL },
 //        { "const",             CONST_DECL },
+        { "typedef", TYPEDEF },
+        { "extern", EXTERN },
+        { "static", STATIC },
+        { "auto", AUTO },
+        { "register", REGISTER },
+        { "char", CHAR_TOK },
+        { "short", SHORT_TOK },
+        { "int", INT_TOK },
+        { "long", LONG_TOK },
+        { "signed", SIGNED },
+        { "unsigned", UNSIGNED },
+        { "float", FLOAT_TOK },
+        { "double", DOUBLE },
+//        { "const", CONST },
+//        { "volatile", VOLATILE }, ignored
+        { "void", VOID_TOK },
+        { "struct", STRUCT },
+        { "union", UNION },
+        { "enum", ENUM },
+        { "...", ELLIPSIS },
+        { "case", CASE },
+        { "default", DEFAULT },
+        { "if", IF },
+        { "else", ELSE },
+        { "switch", SWITCH },
+        { "while", WHILE },
+        { "do", DO },
+        { "for", FOR },
+        { "goto", GOTO },
+        { "continue", CONTINUE },
+        { "break", BREAK },
+        { "return", RETURN },
+        { "sizeof", SIZEOF },
+        { "->", PTR_OP },
+        { "++", INC_OP },
+        { "--", DEC_OP },
+        { "<<", LEFT_OP },
+        { ">>", RIGHT_OP },
+        { "<=", LE_OP },
+        { ">=", GE_OP },
+        { "==", EQ_OP },
+        { "!=", NE_OP },
+        { "&&", AND_OP },
+        { "||", OR_OP },
+        { "*=", MUL_ASSIGN },
+        { "/=", DIV_ASSIGN },
+        { "%=", MOD_ASSIGN },
+        { "+=", ADD_ASSIGN },
+        { "-=", SUB_ASSIGN },
+        { "<<=", LEFT_ASSIGN },
+        { ">>=", RIGHT_ASSIGN },
+        { "&=", AND_ASSIGN },
+        { "^=", XOR_ASSIGN },
+        { "|=", OR_ASSIGN },
     };
     static char const *ignored_kws[] = {
         "ATH_ARG",
