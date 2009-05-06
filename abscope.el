@@ -3,7 +3,7 @@
 ;; process-mark   : 
 (setq abscope-dir "c:/src")
 (setq abscope-file "abscope-queries.org")
-(setq abscope-exe (concat (file-name-directory (buffer-file-name)) "abscope.exe"))
+(setq abscope-exe "c:/abs/abscope/abscope.exe")
 
 (defun abscope-query (type tag)
   (interactive "s (s)truct (f)unc (r)ef:

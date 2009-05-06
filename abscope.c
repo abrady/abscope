@@ -8,19 +8,19 @@
  ***************************************************************************/
 #include "abscope.h"
 #include "c_parse.h"
-#include "c.tab.h"
 
 static void usage(int argc, char**argv)
 {
     argc;
     printf("usage: %s <filename>\n",argv[0]);
     printf("processing options:\n"
-           "-p\t\t: process the passed file\n"
-           "-T    : run tests\n"
-           "-D[pt]: debug (p)arse, (t)iming "
-           "-Q[qrf]: query for (s)tructs, struct(r)efs (f)unctions"
+           "-p\t\t: add the passed file to those processed\n"
+           "-f\t\t: process just this file and exit\n"
+           "-T\t\t: run tests\n"
+           "-D[pt]\t\t: debug (p)arse, (t)iming\n"
+           "-Q[qrf]\t\t: query for (s)tructs, struct(r)efs (f)unctions\n"
 #ifdef _DEBUG
-           "-Z    : wait for debugger attach"
+           "-Z\t\t: wait for debugger attach\n"
 #endif
         );
 }
@@ -170,7 +170,10 @@ int main(int argc, char **argv)
     char *query_str = 0;
 
     if(argc < 2)
+    {
+        usage(argc,argv);
         return -1;
+    }
 
     timer_start = timer_get();
 
@@ -182,6 +185,11 @@ int main(int argc, char **argv)
         {
 
             switch(*a++){
+            case '?':
+            case 'h':
+                usage(argc,argv);
+                return 0;
+                break;
 #ifdef _DEBUG
             case 'Z':
                 fprintf(stderr,"waiting for debugger...");

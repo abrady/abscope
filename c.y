@@ -59,7 +59,7 @@ static void print_token_value (FILE *, int, YYSTYPE);
 // ========================================
 // tokens
 
-%token TYPEDEF EXTERN STATIC STRUCT AUTO_COMMAND
+%token TYPEDEF EXTERN STATIC STRUCT AUTO_COMMAND // NOCONST_DECL CONST_DECL
 %token<num> CHAR_LITERAL
 %token<str> TOK STR
 %type<str>  type_decl
@@ -121,23 +121,43 @@ ignored_stuff:
         ;
 
 function_definition:
-                type_decl TOK '(' function_args_opt ')' '{' { c_add_func(ctxt, $2, @3.first_line); }
+                TOK '(' funcdecl_args_opt ')' '{' { c_add_func(ctxt, $1, @3.first_line); }
                 ;
 
-function_arg:   
-                type_decl TOK //{ printf("arg(%s,%s)", $1, $2); }
+// declarator:    
+//                 pointers direct_declarator
+//         |       direct_declarator
+// ;
+
+// direct_declarator:
+//                 TOK
+//         | '('   declarator ')'
+//         |       direct_declarator '[' TOK ']' // could be more, eh
+//         |       direct_declarator '[' ']'
+//         |       direct_declarator '(' parameter_type_list ')'
+// | direct_declarator '(' identifier_list ')'
+// | direct_declarator '(' ')'
+// ;
+
+funcdecl_arg:   
+                TOK 
+        |       TOK '*' funcdecl_arg
+        |       TOK '(' funcdecl_arg ')' TOK funcdecl_arg 
                 ;
 
-function_args_opt:
-                /*empty*/ //{ printf("no args. "); }
-        |       function_arg ',' function_args_opt //{ printf(","); }
-        |       function_arg
-        |       function_arg error ','
+funcdecl_args_opt:
+                /* nothing */
+        |       funcdecl_arg ',' funcdecl_args_opt //{ printf(","); }
+        |       funcdecl_arg 
                 ;
+
+pointers :
+        |       '*' pointers
+        |       TOK '*' pointers
+
 
 type_decl:
-                TOK            { $$ = $1; }
-        |       type_decl  '*' { $$ = $1; }
+                TOK pointers             { $$ = $1; }
                 ;
 
 
@@ -156,7 +176,7 @@ var_decl: type_decl var_decl_names { c_add_structref(ctxt, $1, @1.first_line); }
 
 var_decl_names: TOK ';'
         |       TOK ',' var_decl_names
-        |       var_decl_names error ';'
+        |       error ';'
         ;
 
 autocmd_decl:   AUTO_COMMAND
@@ -166,12 +186,20 @@ autocmd_decl:   AUTO_COMMAND
 // CParse *ctxt;
 int yylex (CParse *ctxt)
 {
-    static struct { char *kw; int tok; } kws[] = {
+    static const struct { char *kw; int tok; } kws[] = {
         { "typedef",           TYPEDEF },
         { "extern",            EXTERN },
         { "static",            STATIC },
         { "struct",            STRUCT },
         { "AUTO_COMMAND",      AUTO_COMMAND },
+//        { "NOCONST",           NOCONST_DECL },
+//        { "const",             CONST_DECL },
+    };
+    char const *ignored_kws[] = {
+        "ATH_ARG",
+        "NN_PTR_GOOD",
+        "const",
+        "volatile"
     };
     int c;
     char tok[4096];
@@ -295,7 +323,6 @@ yylex_start:
     }
 
     // parse the token
-
     ungetc (c, ctxt->fp);
     while(isalnum(c = GETC()) || c == '_')
         *i++ = c;
@@ -303,7 +330,11 @@ yylex_start:
     if(!*tok) // no characters grabbed. return
         YYLEX_RETURN(c == EOF?0:c);
     ungetc(c,ctxt->fp);
-    //   @todo -AB: destructor :10/25/08 
+
+    for(j = 0; j < DIMOF(ignored_kws); ++j)
+        if(0 == strcmp(tok,ignored_kws[j]))
+            goto yylex_start;
+
     yylval.str = _strdup(tok);
     for(j = 0; j < sizeof(kws)/sizeof(*kws); ++j)
     {

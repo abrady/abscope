@@ -42,6 +42,8 @@ typedef int int32_t;
 #include "strs.h"
 
 #define DIMOF(A) (sizeof(A)/sizeof(*(A)))
+#define ZeroStruct(ptr) memset((ptr), 0, (ptr)?sizeof(*(ptr)):0)
+
 #ifndef R_OK
 #   define R_OK 0x04       // for access()
 #endif
@@ -63,6 +65,8 @@ int match_ext(char *fn, char *ext);
 
 typedef BOOL (*dirscan_fp)(char *filename, void *ctxt);
 void scan_dir(DirScan *d, const char *adir, int recurse_dir,dirscan_fp add_file_callback, void *callback_ctxt);
+
+#define stracpy(DST,SRC) (strncpy((DST),SRC,DIMOF(DST)),(DST)[DIMOF(DST)-1]=0,(DST))
 
 
 S64 timer_get();

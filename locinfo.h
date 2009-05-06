@@ -23,7 +23,7 @@ typedef struct LocInfo
 typedef struct TagRef
 {
     char *tag;
-    LocInfo *locs;
+    LocInfo loc;
 } TagRef;
 
 typedef struct Parse
@@ -32,6 +32,8 @@ typedef struct Parse
     int       n_locs;
     StrPool pool;
 } Parse;
+
+    
 
 int absfile_write_parse(char *fn, Parse *p);
 int absfile_read_parse(char *fn, Parse *p);

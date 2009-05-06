@@ -34,13 +34,6 @@ typedef struct CParse
     S64 getc_timing;
 } CParse;
 
-// *************************************************************************
-// for parser
-// *************************************************************************
-
-void c_add_struct(CParse *ctxt, char *struct_name, int line);
-void c_add_structref(CParse *ctxt, char *struct_name, int line);
-void c_add_func(CParse *ctxt, char *name, int line);
 
 // *************************************************************************
 // invocation
@@ -58,9 +51,9 @@ int c_load(CParse *cp);
 typedef enum CQueryFlag
 {
     CQueryFlag_None = 0,
-    CQueryFlag_Structs = 1<<1,
-    CQueryFlag_Funcs   = 2<<1,
-    CQueryFlag_Structrefs   = 3<<1,
+    CQueryFlag_Structs    = 1<<1,
+    CQueryFlag_Funcs      = 1<<2,
+    CQueryFlag_Structrefs = 1<<3,
 } CQueryFlag;
 
 int c_findstructs(CParse *cp, char *sn);

@@ -73,8 +73,8 @@ int absfile_read_parse(char *fn, Parse *p)
 
     if(!pool_base || !strdata_len)
     {
-        fprintf(stderr,"unable to read pool_base pointer %p or data len %i",pool_base,strdata_len);
-        return -2;
+        fprintf(stderr,"warning: no locations read from file %s\n",fn);
+        return 0;
     }
     
     p->pool.strs = realloc(p->pool.strs,strdata_len);

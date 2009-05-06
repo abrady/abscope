@@ -9,7 +9,7 @@
 :after_vcvars
 
 @del c.tab.c c.tab.h c.output
-bison c.y
+@REM bison c.y
 @if NOT "%ERRORLEVEL%"=="0" goto error
 
 @REM /RTC{s,c,u} : stack frame runtime checking, convert checks, unininitialized checks
@@ -21,9 +21,9 @@ bison c.y
 @REM /O2: maximize speed
 @REM /Og: global opt
 
-set INPUTS=Kernel32.lib abscope.c locinfo.c c_parse.c c.tab.c strs.c abutil.c
-set FLAGS=/O2
-@REM set FLAGS=/RTCscu /ZI
+set INPUTS=Kernel32.lib abscope.c locinfo.c c_parse.c strs.c abutil.c
+@REM set FLAGS=/O2
+set FLAGS=/RTCscu /ZI
 cl /analyze /J /MTd /W4 %FLAGS% %INPUTS%
 
 
