@@ -15,6 +15,7 @@
 typedef struct LocInfo
 {
     char *tag;
+    char *referrer;
     char *context;
     char *file;
     int line;
@@ -41,12 +42,14 @@ int absfile_read_parse(char *fn, Parse *p);
 int locinfo_vprintf(LocInfo *li,char *fmt,va_list args);
 int locinfo_printf(LocInfo *li,char *fmt,...);
 
-LocInfo *parse_add_locinfo(Parse *p,char *tag, char *context, char *filename, int line);
+LocInfo *parse_add_locinfo(Parse *p,char *filename, int line, char *tag, char *referrer, char *context);
+LocInfo *parse_add_locinfof(Parse *p,char *filename, int line, char *tag, char *referrer, char *context, ...);
+LocInfo *parse_add_locinfov(Parse *p,char *filename, int line, char *tag, char *referrer, char *context,va_list args);
 void parse_copy_parse(Parse *dst, Parse *src);
 
 int parse_print_search_tag(Parse *p,char *tag);
 void parse_cleanup(Parse *p);
 
-double locinfo_time();
+void locinfo_print_time();
 
 #endif //LOCINFO_H

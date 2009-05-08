@@ -9,17 +9,22 @@
 #include "locinfo.h"
 
 static S64 locinfo_timer = 0;
+static S64 locinfo_fixup_strs_timer = 0;
+static S64 locinfo_parse_find_add_str_timer = 0;
 
 static void fixup_strs(Parse *p,char *old_base)
 {
     int i;
+    TIMER_START();
     for(i = 0; i < p->n_locs; ++i)
     {
         LocInfo *l = p->locs + i;
         l->tag = l->tag?(p->pool.strs + (int)(l->tag - old_base)):NULL;
+        l->referrer = l->referrer?(p->pool.strs + (int)(l->referrer - old_base)):NULL;
         l->context = l->context?(p->pool.strs + (int)(l->context - old_base)):NULL;
         l->file = l->file?(p->pool.strs + (int)(l->file - old_base)):NULL;
     }
+    TIMER_END(locinfo_fixup_strs_timer);
 }
 
 
@@ -102,7 +107,9 @@ cleanup:
 
 void locinfo_print(LocInfo *li)
 {
-    printf("** [[file:%s::%i]] %s: (%s)\n", li->file, li->line, li->tag, li->context?li->context:"");
+    char *referrer = li->referrer ? li->referrer : li->tag;
+    char *ctxt = li->context?li->context:"";
+    printf("** [[file:%s::%i][%s]] %s\n", li->file, li->line, referrer, ctxt);
 }
 
 
@@ -124,24 +131,52 @@ int locinfo_printf(LocInfo *li,char *fmt,...)
 
 static char* parse_find_add_str(Parse *p, char *s)
 {
+    TIMER_START();
     char *old_base = p->pool.strs;
     char *r = strpool_find_add_str(&p->pool,s);
-    if(p->pool.strs != s)   // if we realloc'd, fixup.
+    if(p->pool.strs != old_base)   // if we realloc'd, fixup.
         fixup_strs(p,old_base);
+    TIMER_END(locinfo_parse_find_add_str_timer);
     return r;
 }
 
-
-
-LocInfo *parse_add_locinfo(Parse *p,char *tag, char *context, char *filename, int line)
+LocInfo *parse_add_locinfo(Parse *p,char *filename, int line, char *tag, char *referrer, char *context)
 {
+    return parse_add_locinfof(p,filename,line,tag,referrer,"%s",context);
+}
+
+
+LocInfo *parse_add_locinfof(Parse *p,char *filename, int line, char *tag, char *referrer, char *context,...)
+{
+    LocInfo *r;
+    va_list vl;
+    va_start(vl,context);
+    r = parse_add_locinfov(p,filename,line,tag,referrer,context,vl);
+    va_end(vl);
+    return r;
+}
+
+LocInfo *parse_add_locinfov(Parse *p,char *filename, int line, char *tag, char *referrer, char *context,va_list args)
+{
+    char buf[128];
     LocInfo *l;
+    TIMER_START();
+    *buf = 0;
+    if(context)
+    {
+        vsnprintf(buf,DIMOF(buf),context,args);
+        buf[DIMOF(buf)-1] = 0;
+    }
+    
     p->locs    = realloc(p->locs,sizeof(*p->locs)*(++p->n_locs));
     l          = p->locs+p->n_locs-1;
     l->tag     = parse_find_add_str(p,tag);
-    l->context = parse_find_add_str(p,context);
+    l->referrer= parse_find_add_str(p,referrer);
+    l->context = parse_find_add_str(p,buf);
     l->file    = parse_find_add_str(p,filename);
     l->line    = line;
+
+    TIMER_END(locinfo_timer);
     return l;
 }
 
@@ -164,9 +199,14 @@ int parse_print_search_tag(Parse *p,char *tag)
     return res;
 }
 
-double locinfo_time()
+void locinfo_print_time()
 {
-    return timer_elapsed(locinfo_timer);
+    printf("locinfo\ntotal:\t\t%f\n"
+           "find_add_str:\t\t%f\n"
+           "fixup_strs:\t\t%f\n",
+           timer_elapsed(locinfo_timer),
+           timer_elapsed(locinfo_parse_find_add_str_timer),
+           timer_elapsed(locinfo_fixup_strs_timer));
 }
 
 void parse_copy_parse(Parse *dst, Parse *src)
@@ -175,7 +215,7 @@ void parse_copy_parse(Parse *dst, Parse *src)
     if(!dst || !src)
         return;
     for(i = 0; i < src->n_locs; ++i)
-        parse_add_locinfo(dst,src->locs[i].tag,src->locs[i].context,src->locs[i].file,src->locs[i].line);
+        parse_add_locinfof(dst,src->locs[i].file,src->locs[i].line,src->locs[i].tag,src->locs[i].referrer,src->locs[i].context);
 }
 
 void parse_cleanup(Parse *p)

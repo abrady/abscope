@@ -9,25 +9,36 @@
 #include "abscope.h"
 #include "c_parse.h"
 
+int g_verbose = 0;
+
 static void usage(int argc, char**argv)
 {
     argc;
     printf("usage: %s <filename>\n",argv[0]);
     printf("processing options:\n"
+           "-R [dir]\t\t: process the passed dirctory recursivey\n"
+           "-E\t\t: exclude the matching directory\n"
            "-p\t\t: add the passed file to those processed\n"
            "-f\t\t: process just this file and exit\n"
+           "-v\t\t: verbose output\n"
            "-T\t\t: run tests\n"
            "-D[pt]\t\t: debug (p)arse, (t)iming\n"
-           "-Q[qrf]\t\t: query for (s)tructs, struct(r)efs (f)unctions\n"
+           "-Q[qrfa]\t\t: query for (s)tructs, struct(r)efs (f)unctions (a)ll\n"
 #ifdef _DEBUG
            "-Z\t\t: wait for debugger attach\n"
 #endif
         );
 }
 
-BOOL dirscan_accept_file(char *path, void *ignored)
+BOOL dirscan_accept_file(char *path, char **exclude_dirs)
 {
-    ignored;
+    char *exc;
+    while(*exclude_dirs)
+    {
+        exc = *exclude_dirs++;
+        if(strstr(path,exc))
+            return 0;
+    }
     return c_ext(path);
 }
 
@@ -95,8 +106,8 @@ static int test_locinfo(void)
     Parse p = {0}; 
     Parse p2 = {0}; 
     printf("testing locinfo...");
-    parse_add_locinfo(&p,"foo","bar","baz",0xaabbccdd);
-    parse_add_locinfo(&p,"alpha","beta","delta",0xaabbccdd);
+    parse_add_locinfo(&p,"baz",0xaabbccdd,"foo","bar","baz");
+    parse_add_locinfo(&p,"delta",0xaabbccdd,"alpha","beta","delta");
     TEST(0==absfile_write_parse("test.absfile",&p));
     TEST(0==absfile_read_parse("test.absfile",&p2));
     TEST(p2.n_locs == 2);
@@ -163,11 +174,14 @@ int main(int argc, char **argv)
     int print_timers = 0;
     S64 timer_start;
     DirScan dir_scan = {0};
+    char *dir_scan_dir = NULL;
     int i;
     struct CParse *cp = &g_cp;
     int process = 0;
     int c_query_flags = 0;
     char *query_str = 0;
+    char *exclude_dirs[128] = {0};
+    int n_exclude_dirs = 0;
 
     if(argc < 2)
     {
@@ -198,6 +212,9 @@ int main(int argc, char **argv)
                 fprintf(stderr,"done.\n");
                 break;
 #endif
+            case 'v':
+                g_verbose = 1;
+                break;
             case 'D':
                 while(*a && !isspace(*a))
                 {
@@ -215,6 +232,9 @@ int main(int argc, char **argv)
                     };
                     a++;
                 };
+                break;
+            case 'E':
+                exclude_dirs[n_exclude_dirs++] = argv[++i];
                 break;
             case 'p':   // add a file to process
                 strs_find_add_str(&dir_scan.files,&dir_scan.n_files,argv[++i]);
@@ -235,6 +255,9 @@ int main(int argc, char **argv)
                     case 'f':
                         c_query_flags |= CQueryFlag_Funcs;
                         break;
+                    case 'a':
+                        c_query_flags = 0xffffffff;
+                        break;
                     default:
                         fprintf(stderr, "unknown query option %c in %s\n",*a, argv[i-1]);
                         return -1;
@@ -244,7 +267,7 @@ int main(int argc, char **argv)
                 break;
             case 'R':
                 i++;
-                scan_dir(&dir_scan,(argv[i] && *argv[i] != '-')?argv[i]:".",1,dirscan_accept_file,NULL);
+                dir_scan_dir = (i < argc && argv[i] && *argv[i] != '-')?argv[i]:".";
                 process = 1;
                 break;
             case 'T':
@@ -266,6 +289,9 @@ int main(int argc, char **argv)
         };
     }
 
+    if(dir_scan_dir)
+        scan_dir(&dir_scan,dir_scan_dir,1,dirscan_accept_file,exclude_dirs);
+
     if(process)
     {
         printf("processing %i files\n", dir_scan.n_files);
@@ -278,6 +304,9 @@ int main(int argc, char **argv)
         for(i = 0; i < dir_scan.n_files; ++i)
         {
             char *fn = dir_scan.files[i];
+            if(g_verbose)
+                printf("%s\n",fn);
+
             if(c_ext(fn))
                 res += c_parse_file(cp,fn);
         }
@@ -299,11 +328,10 @@ end:
     if(print_timers)
     {
         printf("process took %f\n"
-               "queries took %f\n"
                "allocs took %f seconds\n", 
-               timer_diffelapsed(timer_start), 
-               locinfo_time(),
+               timer_diffelapsed(timer_start),
                alloc_time());
+        locinfo_print_time();
         c_parse_print_time(cp);
     }
     return res;

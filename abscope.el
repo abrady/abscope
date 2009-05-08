@@ -1,7 +1,7 @@
 ;; ;;
 ;; process-buffer : the buffer for a process
 ;; process-mark   : 
-(setq abscope-dir "c:/src")
+(setq abscope-dir "c:/abs/abscope")
 (setq abscope-file "abscope-queries.org")
 (setq abscope-exe "c:/abs/abscope/abscope.exe")
 

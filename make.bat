@@ -22,8 +22,8 @@
 @REM /Og: global opt
 
 set INPUTS=Kernel32.lib abscope.c locinfo.c c_parse.c strs.c abutil.c
-@REM set FLAGS=/O2
-set FLAGS=/RTCscu /ZI
+set FLAGS=/O2
+@REM set FLAGS=/RTCscu /ZI
 cl /analyze /J /MTd /W4 %FLAGS% %INPUTS%
 
 

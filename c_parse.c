@@ -12,27 +12,29 @@
 
 int c_parse(CParse *ctxt);
 
+#define OR(A,B) ((A)?(A):(B))
+
 void c_add_struct(CParse *ctxt, char *struct_name, int line)
 {
-    LocInfo *l = parse_add_locinfo(&ctxt->structs,struct_name,ctxt->parse_context,ctxt->parse_file,line);
+    LocInfo *l = parse_add_locinfof(&ctxt->structs,ctxt->parse_file,line,struct_name,NULL,"struct %s", struct_name);
     if(!l)
         return;
     ctxt->parse_context = l->tag;
 }
 
-void c_add_structref(CParse *ctxt, char *referred_to, char *referrer, int line)
+static void c_add_structref(CParse *ctxt, int line, char *referent, char *referrer, char *varinfo)
 {
-    parse_add_locinfo(&ctxt->structrefs,referred_to,referrer,ctxt->parse_file,line);
+    parse_add_locinfo(&ctxt->structrefs,ctxt->parse_file,line,referent,OR(referrer,""),OR(varinfo,""));
 }
 
-void c_add_func(CParse *ctxt, char *name, int line)
+void c_add_func(CParse *ctxt, int line, char *name, char *func_line)
 {
-    parse_add_locinfo(&ctxt->funcs,name,"",ctxt->parse_file,line);
+    parse_add_locinfo(&ctxt->funcs,ctxt->parse_file,line,name,name,func_line);
 }
 
-void c_add_funcref(CParse *ctxt, char *referred_to, char *referrer, int line)
+void c_add_funcref(CParse *ctxt, int line, char *referent, char *referrer)
 {
-    parse_add_locinfo(&ctxt->funcrefs,referred_to,referrer,ctxt->parse_file,line);
+    parse_add_locinfo(&ctxt->funcrefs,ctxt->parse_file,line,referent,referent,referrer);
 }
 
 
@@ -354,7 +356,7 @@ static void parse_arglist(CParse *ctxt, StackElt **pstack, int *pn_stack)
     *pstack = stack;    
 }
 
-static void parse_body(CParse *ctxt, Parse *res, StackElt **pstack, int *pn_stack, char *parent_ctxt)
+static void parse_body(CParse *ctxt, Parse *res, StackElt **pstack, int *pn_stack, char *referrer )
 {
     StackElt *stack = *pstack;
     int n_stack = *pn_stack;
@@ -380,10 +382,11 @@ static void parse_body(CParse *ctxt, Parse *res, StackElt **pstack, int *pn_stac
         switch(TOP->tok)
         {
         case '(':
+            c_add_funcref(ctxt,TOP[-1].line,TOP[-1].l.str,referrer);
             parse_arglist(ctxt,&stack,&n_stack);
             break;
         case '{':
-            parse_body(ctxt,res,&stack,&n_stack,parent_ctxt); // recurse
+            parse_body(ctxt,res,&stack,&n_stack,referrer ); // recurse
             parse_cleanup(&TOP->l.locs);
             break;
         case '*':
@@ -401,7 +404,7 @@ static void parse_body(CParse *ctxt, Parse *res, StackElt **pstack, int *pn_stac
             break;
         case ';':
             if(can_see_decls)
-                parse_add_locinfo(res,BP(0)->l.str, parent_ctxt, ctxt->parse_file, BP(0)->line);
+                c_add_structref(ctxt,BP(0)->line,BP(0)->l.str,referrer, ctxt->line);
             n_stack = stack_start;
             break;
         case '}':
@@ -419,28 +422,30 @@ static void parse_body(CParse *ctxt, Parse *res, StackElt **pstack, int *pn_stac
 
 int c_parse(CParse *ctxt)
 {
-    char str[32];
+//    char line_ctxt[DIMOF(ctxt->last_line)];
     StackElt *stack=NULL;
+    char str[2*DIMOF(stack->l.str)]; // copy, might get realloc'd away
     int n_stack = 0;
     int res = 0;
-    c_debug = 1;
+//    c_debug = 1;
     for(;;)
     {
         NEXT_TOK();
         switch(TOP->tok)
         {
         case '{':
+//            strcpy(line_ctxt,ctxt->last_line);
             if(PREV_TOKS3(TYPEDEF,STRUCT, TOK)) // struct decl
             {
-                strcpy(str,TOP[-1].l.str);
+                sprintf(str,"struct %s",TOP[-1].l.str);
                 c_add_struct(ctxt,str,TOP->line);
                 parse_body(ctxt,&ctxt->structrefs,&stack,&n_stack,str);
                 n_stack = 0;
             }
             else if(PREV_TOKS2(TOK,ARGLIST)) // function def
             {
-                strcpy(str,TOP[-2].l.str);
-                c_add_func(ctxt,str,STACK(-2)->line);
+                sprintf(str,"%s()",TOP[-2].l.str);
+                c_add_func(ctxt,STACK(-2)->line,str,ctxt->last_line);
                 parse_body(ctxt,&ctxt->funcrefs,&stack,&n_stack,str);
                 // todo: cleanup arglist
                 n_stack = 0;
@@ -534,8 +539,12 @@ int c_lex(CParse *ctxt, StackElt *top)
 
 //    S64 diff_getc   = timer_get();
 //#define GETC() (ctxt->getc_timing += timer_diff_reset(&diff_getc ), getc(ctxt->fp))
-#define GETC() getc(ctxt->fp)
-#define LEX_RET(VAL) { ctxt->lex_timing += timer_diff(timer_start); return VAL; }
+#define GETC() ((ctxt->line[(ctxt->i_line++)%DIMOF(ctxt->line)] = (char)(c = getc(ctxt->fp))),c)
+#define UNGETC() (ctxt->i_line--,ungetc(c, ctxt->fp)) 
+#define LEX_RET(VAL) { ctxt->lex_timing += timer_diff(timer_start); \
+        ctxt->line[(ctxt->i_line)%DIMOF(ctxt->line)] = 0;           \
+        return VAL;                                                 \
+    }
 
 // think of the gotos as a tail recursion, otherwise
 // every comment, preprocessor, etc. would push unnecessary
@@ -545,10 +554,16 @@ yylex_start:
     i = tok;
     first_line = top->line = ctxt->parse_line;
     newline = 0;
-    while ((c = GETC()) != EOF && isspace(c))
+    while ((GETC()) != EOF && isspace(c))
     {
         if(c == '\n')
         {
+            ctxt->i_line %= DIMOF(ctxt->line);
+            while(isspace(ctxt->line[--ctxt->i_line]))
+                ; // empty
+            ctxt->line[ctxt->i_line+1] = 0;
+            ctxt->i_line = 0;
+            strcpy(ctxt->last_line,ctxt->line);
             ctxt->parse_line++;
             newline = 1;
         }
@@ -561,7 +576,7 @@ yylex_start:
         // if line ends with \, continue to eat.
         for(;;)
         {
-            while((c = GETC()) != '\n' && c != EOF)
+            while((GETC()) != '\n' && c != EOF)
             {
                 if(!isspace(c))
                     last = c;
@@ -571,7 +586,7 @@ yylex_start:
             else
                 break;
         }
-        ungetc (c, ctxt->fp);
+        UNGETC();
         goto yylex_start;
     }
     else if(c == '/') // take care of comments
@@ -579,16 +594,16 @@ yylex_start:
         c=GETC();
         if(c == '/')
         {
-            while((c = GETC()) != '\n' && c != EOF)
+            while((GETC()) != '\n' && c != EOF)
                 ; // empty
-            ungetc (c, ctxt->fp);
+            UNGETC();
             goto yylex_start;
         }
         else if(c == '*')
         {
             for(;;)
             {
-                while((c = GETC()) != '*' && c != EOF)
+                while((GETC()) != '*' && c != EOF)
                 {
                     if(c=='\n')
                         ctxt->parse_line++;
@@ -596,21 +611,21 @@ yylex_start:
                     
                 if((c=GETC()) == '/')
                     break;
-                ungetc(c, ctxt->fp);
+                UNGETC();
             }
             goto yylex_start;
         }
-        ungetc(c, ctxt->fp);
+        UNGETC();
     }
     else if(c == '\'')     // 'a', '\'', '\\'
     {
-        c = GETC();
+        GETC();
         if(c == '\\')
-            c = GETC();
+            GETC();
         top->l.num = c;
-        c = GETC();
+        GETC();
         if(c != '\'')
-            ungetc(c, ctxt->fp); // malformed, oh-well
+            UNGETC(); // malformed, oh-well
         if(c_debug)
             fprintf(stderr,"CHAR_LITERAL(%c)\n",top->l.num);
         LEX_RET(CHAR_LITERAL);
@@ -622,12 +637,12 @@ yylex_start:
             if(c == '\\') // \n, \t, \\, \<newline> etc.
             {
                 *i++ = (char)c;
-                c = GETC();
+                GETC();
                 while(c != EOF && c == ' ' || c == '\t' || c == '\r' || c == '\n')
                 {
                     if(c == '\n')
                         ctxt->parse_line++;
-                    c = GETC();
+                    GETC();
                 }
 
                 if(c == EOF)
@@ -642,15 +657,15 @@ yylex_start:
         *i = 0;
         stracpy(top->l.str,tok);
         if(c != '"')
-            ungetc(c,ctxt->fp);
+            UNGETC();
         if(c_debug)
             fprintf(stderr,"STR(%s)\n",top->l.str);
         LEX_RET(STR);
     }
 
     // parse the token
-    ungetc (c, ctxt->fp);
-    while(isalnum(c = GETC()) || c == '_')
+    UNGETC();
+    while(isalnum(GETC()) || c == '_')
         *i++ = (char)c;
     *i = 0;
     if(!*tok) // no characters grabbed. return
@@ -660,7 +675,7 @@ yylex_start:
         LEX_RET(c == EOF?0:c);
     }
     
-    ungetc(c,ctxt->fp);
+    UNGETC();
 
     for(j = 0; j < DIMOF(ignored_kws); ++j)
         if(0 == strcmp(tok,ignored_kws[j]))
@@ -680,4 +695,3 @@ yylex_start:
         fprintf(stderr,"TOK(%s)\n",tok);
     LEX_RET(TOK);
 }
-

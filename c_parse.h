@@ -29,7 +29,9 @@ typedef struct CParse
     int   parse_line;
     char  parse_error[512];
     char  *parse_context;
-
+    char  last_line[512];
+    char  line[512];
+    int   i_line;
 
     // timing
     S64 lex_timing;

@@ -2,14 +2,20 @@ typedef struct Foo
 {
     int a;
     char *b;
-} Asdf;
+} Foo;
+
+typedef struct Bar
+{
+    int bar_a;
+    char baz_b;
+} Foo;
 
 void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )
 {
     int a;
-    Foo b;
+    abc b;
 }
-
+/*
 typedef struct Bar
 {
     void *p;
@@ -31,3 +37,4 @@ void inv_trh_AddSlotToBagWithDef(ATR_ARGS, ATH_ARG NOCONST(Entity)* pEnt, ATH_AR
 
 const char* RankNames[NUM_CRITTER_RANKS] = {"henchman", "villain", "mastervillain", "supervillain", "legendaryvillain", "cosmicvillain" };
 
+*/
