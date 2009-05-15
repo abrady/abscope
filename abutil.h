@@ -68,6 +68,9 @@ void scan_dir(DirScan *d, const char *adir, int recurse_dir,dirscan_fp add_file_
 
 #define stracpy(DST,SRC) (strncpy((DST),SRC,DIMOF(DST)),(DST)[DIMOF(DST)-1]=0,(DST))
 
+#define DEREF(s,m) ((s)?(s)->m:0)
+#define DEREF2(s,m,m2) ((s)?DEREF((s)->m,m2):0)
+#define MAX(a,b) (((a) > (b))?(a):(b))
 
 S64 timer_get();
 S64 timer_diff(S64 timer_start);
@@ -77,7 +80,6 @@ double timer_elapsed(S64 timer);
 double timer_diffelapsed(S64 timer);
 #define TIMER_START() S64 timer_start = timer_get()
 #define TIMER_END(DEST) DEST += timer_diff(timer_start);
-
 
 
 #define TIME_ALLOCS

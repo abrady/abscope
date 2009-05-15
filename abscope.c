@@ -7,6 +7,7 @@
  *
  ***************************************************************************/
 #include "abscope.h"
+#include "abtree.h"
 #include "c_parse.h"
 
 int g_verbose = 0;
@@ -142,6 +143,7 @@ static int abscope_test()
 
     printf("TESTING\n");
 
+    TEST(0==avltree_test());
     TEST(0==test_strpool());
     TEST(0==test_locinfo());
     
