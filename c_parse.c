@@ -14,10 +14,16 @@ int c_parse(CParse *ctxt);
 
 #define OR(A,B) ((A)?(A):(B))
 
-void c_add_struct(CParse *ctxt, char *struct_name, int line)
+static void c_add_struct(CParse *ctxt, char *struct_name, int line)
 {
     parse_add_locinfof(&ctxt->structs,ctxt->parse_file,line,struct_name,NULL,"struct %s", struct_name);
 }
+
+static void c_add_enum(CParse *ctxt, char *struct_name, int line)
+{
+    parse_add_locinfof(&ctxt->structs,ctxt->parse_file,line,struct_name,NULL,"enum %s", struct_name);
+}
+
 
 // static void c_add_structref(CParse *ctxt, int line, char *referent, char *referrer, char *varinfo)
 // {
@@ -476,6 +482,15 @@ int c_parse(CParse *ctxt)
             {
                 c_add_struct(ctxt,top[-1].l.str,top->line);
                 // todo: struct members
+//                parse_body(ctxt,&ctxt->structrefs,stack,&n_stack,str);
+                parse_to_tok(ctxt,stack,n_stack,'}','{');
+                parse_to_tok(ctxt,stack,n_stack,';',0);
+                n_stack = 0;
+            }
+            else if(PREV_TOKS3(TYPEDEF,ENUM,TOK)) // struct decl
+            {
+                c_add_enum(ctxt,top[-1].l.str,top->line);
+                // todo: enum members
 //                parse_body(ctxt,&ctxt->structrefs,stack,&n_stack,str);
                 parse_to_tok(ctxt,stack,n_stack,'}','{');
                 parse_to_tok(ctxt,stack,n_stack,';',0);
