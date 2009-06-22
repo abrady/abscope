@@ -18,6 +18,8 @@
 #include <windows.h>
 //#include <winsock2.h>
 #include <winbase.h>  // for IsDebuggerPresent
+#define break_if_debugging() ((IsDebuggerPresent())?DebugBreak(),1:1)
+
 #endif
 
 typedef unsigned __int64 U64;
@@ -42,7 +44,8 @@ typedef int int32_t;
 #include "strs.h"
 
 #define DIMOF(A) (sizeof(A)/sizeof(*(A)))
-#define ZeroStruct(ptr) memset((ptr), 0, (ptr)?sizeof(*(ptr)):0)
+#define ZeroStruct(ptr) memset((ptr), 0, sizeof(*(ptr)))
+#define ZeroStructs(ptr,n) memset((ptr), 0, sizeof(*(ptr))*n)
 
 #ifndef R_OK
 #   define R_OK 0x04       // for access()
@@ -61,12 +64,13 @@ typedef struct DirScan
 
 int file_exists(char *fname);
 char* str_downcase(char *str);
-int match_ext(char *fn, char *ext);
+int match_ext(char *fn, char *ext); // pass "c" not ".c"
 
 typedef BOOL (*dirscan_fp)(char *filename, void *ctxt);
 void scan_dir(DirScan *d, const char *adir, int recurse_dir,dirscan_fp add_file_callback, void *callback_ctxt);
 
 #define stracpy(DST,SRC) (strncpy((DST),SRC,DIMOF(DST)),(DST)[DIMOF(DST)-1]=0,(DST))
+#define stricmp _stricmp
 
 #define DEREF(s,m) ((s)?(s)->m:0)
 #define DEREF2(s,m,m2) ((s)?DEREF((s)->m,m2):0)
@@ -99,5 +103,7 @@ void abfree(void *p);
 #define realloc abrealloc
 #define free    abfree
 #endif
+
+#define ABINLINE __forceinline
 
 #endif //ABUTIL_H

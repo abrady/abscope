@@ -37,17 +37,9 @@ char *strs_find_add_str(char ***pstrs, int *n_strs, char *s)
 
 char *strpool_find_str(StrPool *pool, char *s)
 {
-    char *p;
-    if(!pool || !s)
+    if(!pool)
         return NULL;
-    p = pool->strs;
-    while(p != pool->end)
-    {
-        if(0 == strcmp(p,s))
-            return p;
-        p += strlen(p)+1;
-    }
-    return NULL;
+    return avltree_find(&pool->tree,s);
 }
 
 char *strpool_find_add_str(StrPool *pool, char *s)
@@ -61,24 +53,93 @@ char *strpool_find_add_str(StrPool *pool, char *s)
     return strpool_add_str(pool,s);
 }
 
-char *strpool_add_str(StrPool *pool, char *s)
+char *strpool_add_str(StrPool *pool, char *s_in)
 {
-    int n;
-    int n_s;
-    int n_pre;
-    char *r;
-    n_s = strlen(s) + 1;
-    n_pre = pool->end - pool->strs;
-    n = n_pre + n_s;
-    pool->strs = realloc(pool->strs,n);
-    pool->end = pool->strs + n_pre;
-    strcpy(pool->end,s);
-    r = pool->end;
-    pool->end += n_s;
-    return r;
+    char *s = s_in;
+    if(!pool || !s)
+        return NULL;
+    s = _strdup(s);
+    strs_add_str(&pool->strs,&pool->n_strs,s);
+    avltree_insert(&pool->tree,s);    
+    return s;
 }
 
 void strpool_cleanup(StrPool *p)
 {
+    avltree_cleanup(&p->tree);
     free(p->strs);
+}
+
+#define TEST(COND) if(!(COND)) {printf("%s(%d):"#COND ": failed\n",__FILE__,__LINE__); break_if_debugging(); return -1;}
+
+int test_strpool(void)
+{
+    StrPool pool = {0};
+    char *p;
+    int i;
+
+    printf("testing strpool...");
+    TEST(!strpool_find_str(&pool,"abc"));
+    p=strpool_find_add_str(&pool,"abc");
+    TEST(p);
+    TEST(0==strcmp("abc",strpool_find_add_str(&pool,"abc")));
+    TEST(p == strpool_find_add_str(&pool,"abc"));
+    
+    for(i = 0; i < 100; ++i)
+    {
+        int j;
+        char tmp[128];
+        sprintf(tmp,"%i",i);
+        strpool_find_add_str(&pool,tmp);
+        for(j = 0; j <= i; ++j)
+        {
+            sprintf(tmp,"%i",j);
+            TEST(strpool_find_str(&pool,tmp));
+        }
+    }
+    strpool_cleanup(&pool);
+    printf("done.\n");
+    return 0;
+}
+
+void strpool_add_strblock(StrPool *pool, char *strblock, int n)
+{
+    char *end = strblock + n;
+    char *s;
+    if(!pool || !strblock)
+        return;
+    s = strblock;
+    while(s < end)
+    {
+        strpool_add_str(pool,s);
+        s += strlen(s)+1;
+    }
+}
+
+// char *strs_pack(char **strs, int n_strs, int *n_bytes_res)
+// {
+//     int strs_len;
+//     int i;
+//     char *res;
+//     char *s;
+//     strs_len = 0;
+//     for(i = 0;i < n_strs; ++i)
+//         strs_len += strlen(p->pool.strs[i]);    
+//     res = malloc(strs_len);
+//     for(i = 0;i < n_strs; ++i)
+//     {
+//         strcpy(s,strs[i]);
+//         s += strlen(strs[i])+1;
+//     }
+//     return res;
+// }
+
+void strs_cleanup(char **strs, int n_strs)
+{
+    int i;
+    for(i = 0; i < n_strs; ++i)
+    {
+        free(strs[i]);
+        strs[i] = 0;
+    }
 }

@@ -47,7 +47,7 @@ void scan_dir(DirScan *d, const char *adir, int recurse_dir,dirscan_fp add_file_
             file = entry->d_name;
             if (recurse_dir && S_ISDIR(buf.st_mode) )
                 scan_dir(d, path, recurse_dir, add_file_callback, callback_ctxt);
-            else if (_access(path, R_OK) == 0 && add_file_callback(path, callback_ctxt))
+            else if (_access(path, R_OK) == 0 && (!add_file_callback || add_file_callback(path, callback_ctxt)))
                 strs_find_add_str(&d->files,&d->n_files,_strdup(path));
 		}
 		closedir(dirfile);

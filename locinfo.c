@@ -7,31 +7,51 @@
  *
  ***************************************************************************/
 #include "locinfo.h"
+#include "abserialize.h"
 
 static S64 locinfo_timer = 0;
-static S64 locinfo_fixup_strs_timer = 0;
 static S64 locinfo_parse_find_add_str_timer = 0;
+#define LOCINFO_TIMER_START TIMER_START
+#define LOCINFO_TIMER_END() TIMER_END(locinfo_timer)
 
-static void fixup_strs(Parse *p,char *old_base)
+static void locinfo_cleanup(LocInfo *l)
 {
-    int i;
-    TIMER_START();
-    for(i = 0; i < p->n_locs; ++i)
-    {
-        LocInfo *l = p->locs + i;
-        l->tag = l->tag?(p->pool.strs + (int)(l->tag - old_base)):NULL;
-        l->referrer = l->referrer?(p->pool.strs + (int)(l->referrer - old_base)):NULL;
-        l->context = l->context?(p->pool.strs + (int)(l->context - old_base)):NULL;
-        l->file = l->file?(p->pool.strs + (int)(l->file - old_base)):NULL;
-    }
-    TIMER_END(locinfo_fixup_strs_timer);
+    free(l->tag);
+    free(l->referrer);
+    free(l->context);
+    free(l->file);
+    ZeroStruct(l);
+}
+
+
+ABINLINE int locinfo_write(FILE *fp, LocInfo *l)
+{
+    int res = 0;
+    res += binwrite_string(fp,l->tag);
+    res += binwrite_string(fp,l->referrer);
+    res += binwrite_string(fp,l->context);
+    res += binwrite_string(fp,l->file);
+    res += binwrite_int(fp,l->line);
+    return res;
+}
+
+ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
+{
+    int res = 0;
+    res += binread_string(fp,&l->tag);
+    res += binread_string(fp,&l->referrer);
+    res += binread_string(fp,&l->context);
+    res += binread_string(fp,&l->file);
+    res += binread_int(fp,&l->line);
+    return res;
 }
 
 
 int absfile_write_parse(char *fn, Parse *p)
 {
+    int i;
     FILE *fp;
-    int32_t strs_len = 0;
+
     TIMER_START();
 
     fp = absfile_open_write(fn);
@@ -41,15 +61,16 @@ int absfile_write_parse(char *fn, Parse *p)
         return -1;
     }
     
-    // write strings
-    strs_len = p->pool.end - p->pool.strs;          
-    fwrite(&p->pool.strs,sizeof(p->pool.strs),1,fp); // 1. write start ptr
-    fwrite(&strs_len,sizeof(strs_len),1,fp);     // 2. mem block size
-    fwrite(p->pool.strs,strs_len,1,fp);            // 3. data
-    
     // write infos
     fwrite(&p->n_locs,sizeof(p->n_locs),1,fp);
-    fwrite(p->locs,sizeof(*p->locs),p->n_locs,fp);
+    for(i = 0; i < p->n_locs; ++i)
+    {
+        if(0!=locinfo_write(fp,p->locs+i))
+        {
+            fprintf(stderr,"failed to write loc %i to %s",i,fn);
+            return -2;
+        }
+    }
     
     fclose(fp);
     TIMER_END(locinfo_timer);
@@ -58,51 +79,38 @@ int absfile_write_parse(char *fn, Parse *p)
 
 int absfile_read_parse(char *fn, Parse *p)
 {
-    int res = 0;
-    int nread;
+    int i;
     int n_alloc;
-    char *pool_base;
-    int32_t strdata_len = 0;
     FILE *fp = absfile_open_read(fn);
     TIMER_START();
 
     if(!fp || !p)
     {
         fprintf(stderr,"couldn't open file %s to read locinfos\n",fn);
+        TIMER_END(locinfo_timer);
         return -1;
     }
 
-    // read the string data
-    fread(&pool_base,sizeof(pool_base),1,fp);             // 1. pointer
-    fread(&strdata_len,sizeof(strdata_len),1,fp); // 2. data len
 
-    if(!pool_base || !strdata_len)
-    {
-        fprintf(stderr,"warning: no locations read from file %s\n",fn);
-        return 0;
-    }
-    
-    p->pool.strs = realloc(p->pool.strs,strdata_len);
-    p->pool.end  = p->pool.strs + strdata_len;
-    fread(p->pool.strs,strdata_len,1,fp);           // 3. data
-    
-    // read the on-file location info
     fread(&p->n_locs,sizeof(p->n_locs),1,fp);
     n_alloc = sizeof(*p->locs)*p->n_locs;
     p->locs = realloc(p->locs,n_alloc);
-    nread  = fread(p->locs,n_alloc,1,fp);
-    if(nread != 1)
+    ZeroStructs(p->locs,p->n_locs);
+    for(i = 0; i < p->n_locs; ++i)
     {
-        fprintf(stderr,"read %i infos, expected %i",nread,p->n_locs);
-        res = -4;
-        goto cleanup;
+        LocInfo *l = p->locs + i;
+        if(locinfo_read(fp,l) < 0)
+        {
+            fprintf(stderr,"couldn't read locinfo %i from %s",i,fn);
+            TIMER_END(locinfo_timer);
+            return -1;
+        }
         
     }
-    fixup_strs(p,pool_base);
-    
-cleanup:
+
+
     TIMER_END(locinfo_timer);
-    return res;
+    return 0;
 }
 
 void locinfo_print(LocInfo *li)
@@ -132,23 +140,21 @@ int locinfo_printf(LocInfo *li,char *fmt,...)
 static char* parse_find_add_str(Parse *p, char *s)
 {
     TIMER_START();
-    char *old_base = p->pool.strs;
-    char *r = strpool_find_add_str(&p->pool,s);
-    if(p->pool.strs != old_base)   // if we realloc'd, fixup.
-        fixup_strs(p,old_base);
+    char *r = _strdup(s); // strpool_find_add_str(&p->pool,s);
+    p;
     TIMER_END(locinfo_parse_find_add_str_timer);
     return r;
 }
 
-LocInfo *parse_add_locinfo(Parse *p,char *filename, int line, char *tag, char *referrer, char *context)
+int parse_add_locinfo(Parse *p,char *filename, int line, char *tag, char *referrer, char *context)
 {
     return parse_add_locinfof(p,filename,line,tag,referrer,"%s",context);
 }
 
 
-LocInfo *parse_add_locinfof(Parse *p,char *filename, int line, char *tag, char *referrer, char *context,...)
+int parse_add_locinfof(Parse *p,char *filename, int line, char *tag, char *referrer, char *context,...)
 {
-    LocInfo *r;
+    int r;
     va_list vl;
     va_start(vl,context);
     r = parse_add_locinfov(p,filename,line,tag,referrer,context,vl);
@@ -156,7 +162,7 @@ LocInfo *parse_add_locinfof(Parse *p,char *filename, int line, char *tag, char *
     return r;
 }
 
-LocInfo *parse_add_locinfov(Parse *p,char *filename, int line, char *tag, char *referrer, char *context,va_list args)
+int parse_add_locinfov(Parse *p,char *filename, int line, char *tag, char *referrer, char *context,va_list args)
 {
     char buf[128];
     LocInfo *l;
@@ -177,7 +183,7 @@ LocInfo *parse_add_locinfov(Parse *p,char *filename, int line, char *tag, char *
     l->line    = line;
 
     TIMER_END(locinfo_timer);
-    return l;
+    return l - p->locs;
 }
 
 
@@ -202,11 +208,10 @@ int parse_print_search_tag(Parse *p,char *tag)
 void locinfo_print_time()
 {
     printf("locinfo\ntotal:\t\t%f\n"
-           "find_add_str:\t\t%f\n"
-           "fixup_strs:\t\t%f\n",
+           "find_add_str:\t\t%f\n",
            timer_elapsed(locinfo_timer),
-           timer_elapsed(locinfo_parse_find_add_str_timer),
-           timer_elapsed(locinfo_fixup_strs_timer));
+           timer_elapsed(locinfo_parse_find_add_str_timer)
+        );
 }
 
 void parse_copy_parse(Parse *dst, Parse *src)
@@ -220,6 +225,37 @@ void parse_copy_parse(Parse *dst, Parse *src)
 
 void parse_cleanup(Parse *p)
 {
+    int i;
+    for(i = 0; i<p->n_locs; ++i)
+        locinfo_cleanup(p->locs+i);
     free(p->locs);
-    strpool_cleanup(&p->pool);
+}
+
+#define TEST(COND) if(!(COND)) {printf("%s(%d):"#COND ": failed\n",__FILE__,__LINE__); break_if_debugging(); return -1;}
+
+int test_locinfo(void)
+{
+    Parse p = {0}; 
+    Parse p2 = {0}; 
+    printf("testing locinfo...");
+    parse_add_locinfo(&p,"filename",0xaabbccdd,"foo","bar","baz");
+    parse_add_locinfo(&p,"fn2",0xaabbccee,"alpha","beta","delta");
+    TEST(0==absfile_write_parse("test.absfile",&p));
+    TEST(0==absfile_read_parse("test.absfile",&p2));
+    TEST(p2.n_locs == 2);
+    TEST(0==strcmp(p2.locs[0].tag,"foo"));
+    TEST(0==strcmp(p2.locs[0].referrer,"bar"));
+    TEST(0==strcmp(p2.locs[0].context,"baz"));
+    TEST(0==strcmp(p2.locs[0].file,"filename"));
+    TEST(p2.locs[0].line == 0xaabbccdd);
+
+    TEST(0==strcmp(p2.locs[1].tag,"alpha"));
+    TEST(0==strcmp(p2.locs[1].referrer,"beta"));
+    TEST(0==strcmp(p2.locs[1].context,"delta"));
+    TEST(0==strcmp(p2.locs[1].file,"fn2"));
+    TEST(p2.locs[1].line == 0xaabbccee);
+    printf("done.\n");
+    parse_cleanup(&p);
+    parse_cleanup(&p2);
+    return 0;
 }

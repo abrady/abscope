@@ -9,6 +9,53 @@
 #include "abutil.h"
 #include "abtree.h"
 
+#define AVL_NODE_HEIGHT(n) (MAX(DEREF(n->left,height),DEREF(n->right,height)) + 1)
+
+static void avltree_rotfixup(AvlTree *t, AvlNode *n, AvlNode *r)
+{
+    AvlNode *tmp;
+    if(n == t->root)
+        t->root = r;
+    else if(n->up->left == n)
+        n->up->left = r;
+    else if(n->up->right == n)
+        n->up->right = r;
+
+    tmp = DEREF(n->up,up);
+    n->up = r;
+    r->up = tmp;
+
+    n->height = AVL_NODE_HEIGHT(n);
+    r->height = AVL_NODE_HEIGHT(r);
+}
+
+
+static void avltree_rotleft(AvlTree *t, AvlNode *n)
+{
+    AvlNode *r;
+    AvlNode *tmp;
+    r = n->right;
+    if(!r) 
+        return;
+    tmp = r->left;
+    r->left = n;
+    n->right = tmp;
+    avltree_rotfixup(t,n,r);
+}
+
+static void avltree_rotright(AvlTree *t, AvlNode *n)
+{
+    AvlNode *r;
+    AvlNode *tmp;
+    r = n->left;
+    if(!r)
+        return;
+    tmp = r->right;
+    r->right = n;
+    n->left = tmp;
+    avltree_rotfixup(t,n,r);
+}
+
 // ***********************************************************************
 // For a left heavy tree (symmetric):
 //     X
@@ -35,37 +82,6 @@ static void avltree_rebalance(AvlTree *t, AvlNode *n_in)
     int n_l;
     int n_r;
     AvlNode *n;
-    AvlNode *tmp;
-    AvlNode *r;
-
-#define AVL_NODE_HEIGHT(n) (MAX(DEREF(n->left,height),DEREF(n->right,height)) + 1)
-
-#define ROT_FIXUP(n,r)        n->height = AVL_NODE_HEIGHT(n);   \
-    r->height = AVL_NODE_HEIGHT(r);                             \
-    tmp = n->up;                                                \
-    n->up = r;                                                  \
-    r->up = tmp;                                                \
-    if(n == t->root && n->up)                                   \
-        t->root = n->up;                                        \
-    n = r
-
-
-#define ROT_RIGHT(n) {                          \
-        r = n->left;                            \
-        tmp = r->right;                         \
-        r->right = n;                           \
-        n->left = tmp;                          \
-        ROT_FIXUP(n,r);                         \
-    }
-
-#define ROT_LEFT(n) {                           \
-        r = n->right;                           \
-        tmp = r->left;                          \
-        r->left = n;                            \
-        n->right = tmp;                         \
-        ROT_FIXUP(n,r);                         \
-    } 
-    
 
     for(n = n_in; n; n = n->up)
     {
@@ -77,18 +93,25 @@ static void avltree_rebalance(AvlTree *t, AvlNode *n_in)
         {
             // left heavy. move left branch up.
             if(DEREF2(n->left,right,height) > DEREF2(n->left,left,height))
-                ROT_LEFT(n->left);
-            ROT_RIGHT(n);
+                avltree_rotleft(t,n->left);
+            avltree_rotright(t,n);
         }
         else if((n_r - n_l) > 1)
         {
             // right heavy: right becomes parent.
             if(DEREF2(n->right,left,height) > DEREF2(n->right,right,height))
-                ROT_RIGHT(n->right);
-            ROT_LEFT(n);
+                avltree_rotright(t,n->right);
+            avltree_rotleft(t,n);
         }
     }
 }
+
+static void avltree_init(AvlTree *t)
+{
+    if(!t->cmp)
+        t->cmp = strcmp;
+}
+
 
 void avltree_insert(AvlTree *t, void *p)
 {
@@ -97,6 +120,8 @@ void avltree_insert(AvlTree *t, void *p)
     
     if(!t || !p)
         return;
+    avltree_init(t);
+    
     while(*n)
     {
         up = *n;
@@ -111,7 +136,7 @@ void avltree_insert(AvlTree *t, void *p)
     avltree_rebalance(t,(*n));
 }
 
-void avltree_clear(AvlTree *t)
+void avltree_cleanup(AvlTree *t)
 {
     AvlNode *n;
     AvlNode *tmp;
@@ -140,7 +165,35 @@ void avltree_clear(AvlTree *t)
     t->root = NULL;
 }
 
-#define TEST(COND) if(!(COND)) {printf(#COND ": failed\n"); return -1;}
+char *avltree_find(AvlTree *t, char *p)
+{
+    AvlNode *n = avltree_findnode(t,p);
+    if(n)
+        return n->p;
+    return NULL;
+}
+
+AvlNode *avltree_findnode(AvlTree *t, char *p)
+{
+    AvlNode *n;
+    int c;
+    if(!t || !p)
+        return NULL;
+    avltree_init(t);
+    for(n = t->root;n;)
+    {
+        c = t->cmp(p,n->p);
+        if(c == 0)
+            return n;
+        else if(c < 0)
+            n = n->left;
+        else
+            n = n->right;
+    }
+    return n;
+}
+
+#define TEST(COND) if(!(COND)) {printf(#COND ": failed\n"); break_if_debugging(); return -1;}
 int avltree_test()
 {
     AvlTree t = {0};
@@ -161,7 +214,7 @@ int avltree_test()
     TEST(!n->right->left  && !n->right->right);
     TEST(n->left->up == n && n->right->up == n);
 
-    avltree_clear(&t);
+    avltree_cleanup(&t);
     TEST(!t.root);
     avltree_insert(&t,"3");
     avltree_insert(&t,"5");
@@ -174,7 +227,7 @@ int avltree_test()
     TEST(!n->right->left  && !n->right->right);
     TEST(n->left->up == n && n->right->up == n);
 
-    avltree_clear(&t);
+    avltree_cleanup(&t);
     avltree_insert(&t,"5");
     avltree_insert(&t,"3");
     avltree_insert(&t,"4");
@@ -186,7 +239,7 @@ int avltree_test()
     TEST(!n->right->left  && !n->right->right);
     TEST(n->left->up == n && n->right->up == n);
 
-    avltree_clear(&t);
+    avltree_cleanup(&t);
     avltree_insert(&t,"3");
     avltree_insert(&t,"5");
     avltree_insert(&t,"4");
@@ -198,7 +251,19 @@ int avltree_test()
     TEST(!n->right->left  && !n->right->right);
     TEST(n->left->up == n && n->right->up == n);
 
-    avltree_clear(&t);
+    avltree_cleanup(&t);
+    avltree_insert(&t,"abc");
+    avltree_insert(&t,"0");
+    avltree_insert(&t,"1");
+    avltree_insert(&t,"2");
+    avltree_insert(&t,"3");
+    TEST(avltree_find(&t,"abc"));
+    TEST(avltree_find(&t,"0"));
+    TEST(avltree_find(&t,"1"));
+    TEST(avltree_find(&t,"2"));
+    TEST(avltree_find(&t,"3"));
+
+    avltree_cleanup(&t);
     printf("done\n");
     return 0;
 }

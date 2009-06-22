@@ -1,7 +1,7 @@
 ;; ;;
 ;; process-buffer : the buffer for a process
 ;; process-mark   : 
-(setq abscope-dir "c:/abs/abscope")
+(setq abscope-dir "c:/src/crossroads")
 (setq abscope-file "abscope-queries.org")
 (setq abscope-exe "c:/abs/abscope/abscope.exe")
 
@@ -12,7 +12,7 @@ stag:")
   (find-file abscope-file)
   (end-of-buffer)
   (insert "\n\n* " tag "\n")
-  (start-process "abscope" (current-buffer) "c:/abs/abscope/abscope.exe" 
+  (start-process "abscope" (current-buffer) abscope-exe
                  (format "-Q%s" type) tag)
   )
 

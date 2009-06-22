@@ -15,6 +15,25 @@ void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )
     int a;
     abc b;
 }
+
+AUTO_STARTUP(AlgoTablesCommon);
+void CommonAlgoTables_Load(void)
+{
+	loadstart_printf("Loading CommonAlgoTables...");
+
+	StructInit(parse_CommonAlgoTables, &g_CommonAlgoTables);
+
+	ParserLoadFiles( NULL, "defs/rewards/algotables_common.data", "algotables_common.bin", 0, parse_CommonAlgoTables, &g_CommonAlgoTables);	
+
+	loadend_printf(" done." );
+
+	if (isDevelopmentMode())
+	{
+		// Have reload take effect immediately
+		FolderCacheSetCallback(FOLDER_CACHE_CALLBACK_UPDATE, "defs/rewards/algotables_common.data", CommonAlgoTables_ReloadCallback);
+	}
+}
+
 /*
 typedef struct Bar
 {

@@ -17,7 +17,7 @@ static void usage(int argc, char**argv)
     argc;
     printf("usage: %s <filename>\n",argv[0]);
     printf("processing options:\n"
-           "-R [dir]\t\t: process the passed dirctory recursivey\n"
+           "-R [dir]\t\t: process the passed dirctory recursively\n"
            "-E\t\t: exclude the matching directory\n"
            "-p\t\t: add the passed file to those processed\n"
            "-f\t\t: process just this file and exit\n"
@@ -70,67 +70,22 @@ FILE *absfile_open_read(char *fn)
     return fp;
 }
 
-#define TEST(COND) if(!(COND)) {printf(#COND ": failed\n"); return -1;}
+#define TEST(COND) if(!(COND)) {printf("%s(%d):"#COND ": failed\n",__FILE__,__LINE__); break_if_debugging(); return -1;}
 
-static int test_strpool(void)
+
+BOOL dirscan_accept_c_files(char *path, char **ctxt)
 {
-    StrPool pool = {0};
-    char *p;
-    int i;
-    
-    TEST(!strpool_find_str(&pool,"abc"));
-    p=strpool_find_add_str(&pool,"abc");
-    TEST(p);
-    TEST(0==strcmp("abc",strpool_find_add_str(&pool,"abc")));
-    TEST(p == strpool_find_add_str(&pool,"abc"));
-    
-    for(i = 0; i < 100; ++i)
-    {
-        char tmp[128];
-        sprintf(tmp,"%i",i);
-        strpool_find_add_str(&pool,tmp);
-    }
-    p = pool.end;
-    for(i = 0; i < 100; ++i)
-    {
-        char tmp[128];
-        sprintf(tmp,"%i",i);
-        strpool_find_add_str(&pool,tmp);
-    }
-    TEST(p == pool.end);
-    free(pool.strs);
-    return 0;
+    ctxt; // ignored
+    return path && (match_ext(path,"c") || match_ext(path,"h"));
 }
 
-static int test_locinfo(void)
-{
-    Parse p = {0}; 
-    Parse p2 = {0}; 
-    printf("testing locinfo...");
-    parse_add_locinfo(&p,"baz",0xaabbccdd,"foo","bar","baz");
-    parse_add_locinfo(&p,"delta",0xaabbccdd,"alpha","beta","delta");
-    TEST(0==absfile_write_parse("test.absfile",&p));
-    TEST(0==absfile_read_parse("test.absfile",&p2));
-    TEST(p2.n_locs == 2);
-    TEST(0==strcmp(p2.locs[0].tag,"foo"));
-    TEST(0==strcmp(p2.locs[0].context,"bar"));
-    TEST(0==strcmp(p2.locs[0].file,"baz"));
-    TEST(0==strcmp(p2.locs[1].tag,"alpha"));
-    TEST(0==strcmp(p2.locs[1].context,"beta"));
-    TEST(0==strcmp(p2.locs[1].file,"delta"));    
-    printf("done.\n");
-    free(p.locs);
-    free(p.pool.strs);
-    free(p2.locs);
-    free(p2.pool.strs);
-    return 0;
-}
 
 static int abscope_test()
 {
     int i;
     DirScan dir_scan = {0};
     CParse cp = {0};
+    LocInfo *li;
     static char *structs_to_find[] = {
         "dirent",
         "Foo",
@@ -146,9 +101,44 @@ static int abscope_test()
     TEST(0==avltree_test());
     TEST(0==test_strpool());
     TEST(0==test_locinfo());
-    
+
+    // ----------------------------------------
+    // parse a test file
+
+    break_if_debugging();
+    TEST(0==c_parse_file(&cp,"test/foo.c"));
+
+    TEST(cp.structs.n_locs == 2);
+    li = cp.structs.locs + 0;
+    TEST(0==strcmp(li->tag,"Foo"));
+    TEST(0==stricmp(li->file,"test/Foo.c"));
+    TEST(0==strcmp(li->context,"struct Foo"));
+    TEST(li->line == 1);
+
+    li = cp.structs.locs + 1;
+    TEST(0==strcmp(li->tag,"Bar"));
+    TEST(0==stricmp(li->file,"test/Foo.c"));
+    TEST(0==strcmp(li->context,"struct Bar"));
+    TEST(li->line == 7);
+
+    TEST(cp.funcs.n_locs == 2);
+    li = cp.funcs.locs + 0;
+    TEST(0==strcmp(li->tag,"test_func"));
+    TEST(0==stricmp(li->file,"test/Foo.c"));
+    TEST(0==strcmp(li->context,"void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )"));
+    TEST(li->line == 13);
+
+    li = cp.funcs.locs + 1;
+    TEST(0==strcmp(li->tag,"CommonAlgoTables_Load"));
+    TEST(0==stricmp(li->file,"test/Foo.c"));
+    TEST(0==strcmp(li->context,"void CommonAlgoTables_Load(void)"));
+    TEST(li->line == 20);
+
+    // ----------------------------------------
+    // scan a bunch of files
+
     printf("scanning ./test...");
-    scan_dir(&dir_scan,"./test",1,&dirscan_accept_file,NULL);
+    scan_dir(&dir_scan,"./test",1,dirscan_accept_c_files,NULL);
     printf("done.\n");
 
     printf("found %i files:\n",dir_scan.n_files);
@@ -164,7 +154,7 @@ static int abscope_test()
     for(i = 0; i < DIMOF(structs_to_find); ++i)
         TEST(0<c_findstructs(&cp,structs_to_find[i]));
     for(i = 0; i < DIMOF(structs_not_to_find); ++i)
-        TEST(0<c_findstructs(&cp,structs_not_to_find[i]));
+        TEST(0==c_findstructs(&cp,structs_not_to_find[i]));
     return 0;
 }
 
