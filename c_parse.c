@@ -19,11 +19,15 @@ static void c_add_struct(CParse *ctxt, char *struct_name, int line)
     parse_add_locinfof(&ctxt->structs,ctxt->parse_file,line,struct_name,NULL,"struct %s", struct_name);
 }
 
-static void c_add_enum(CParse *ctxt, char *struct_name, int line)
+static void c_add_enum_decl(CParse *ctxt, char *enum_name, int line)
 {
-    parse_add_locinfof(&ctxt->structs,ctxt->parse_file,line,struct_name,NULL,"enum %s", struct_name);
+    parse_add_locinfof(&ctxt->structs,ctxt->parse_file,line,enum_name,NULL,"enum %s", enum_name); // putting this in structs, should probably rename 'structs' to 'types' 
 }
 
+static void c_add_enum(CParse *ctxt, char *enum_name, char *enum_typename, int line)
+{
+    parse_add_locinfo(&ctxt->enums,ctxt->parse_file,line,enum_name,enum_typename,ctxt->line); 
+}
 
 // static void c_add_structref(CParse *ctxt, int line, char *referent, char *referrer, char *varinfo)
 // {
@@ -40,6 +44,10 @@ static void c_add_funcdef(CParse *ctxt, int line, char *name, char *func_line)
 //     parse_add_locinfo(&ctxt->funcrefs,ctxt->parse_file,line,referent,referent,referrer);
 // }
 
+static void c_add_define(CParse *ctxt, char *define, int line)
+{
+    parse_add_locinfo(&ctxt->defines,ctxt->parse_file,line,define,NULL,ctxt->line);
+}
 
 int c_parse_file(CParse *cp, char *fn)
 {
@@ -74,6 +82,12 @@ int c_on_processing_finished(CParse *cp)
     printf("%i funcs\n",cp->funcs.n_locs);
     res += absfile_write_parse("c_funcs.abs",&cp->funcs);
 
+    printf("%i defines\n",cp->defines.n_locs);
+    res += absfile_write_parse("c_defines.abs",&cp->defines);
+
+    printf("%i enums\n",cp->enums.n_locs);
+    res += absfile_write_parse("c_enums.abs",&cp->enums);
+
     return res;
 }
 
@@ -86,6 +100,10 @@ int c_load(CParse *cp)
         res += absfile_read_parse("c_funcs.abs",&cp->funcs);
     if(file_exists("c_structrefs.abs"))
         res += absfile_read_parse("c_structrefs.abs",&cp->structrefs);
+    if(file_exists("c_defines.abs"))
+        res += absfile_read_parse("c_defines.abs",&cp->defines);
+    if(file_exists("c_enums.abs"))
+        res += absfile_read_parse("c_enums.abs",&cp->enums);
     return res;
 }
 
@@ -107,6 +125,16 @@ int c_findfuncs(CParse *cp, char *name)
     return parse_print_search_tag(&cp->funcs,name);
 }
 
+int c_finddefines(CParse *cp, char *sn)
+{
+    return parse_print_search_tag(&cp->defines,sn);
+}
+
+int c_findenums(CParse *cp, char *sn)
+{
+    return parse_print_search_tag(&cp->enums,sn);
+}
+
 int c_query(CParse *cp, char *tag, int query_flags)
 {
     int res = 0;
@@ -116,6 +144,10 @@ int c_query(CParse *cp, char *tag, int query_flags)
         res += c_findstructrefs(cp,tag);
     if(query_flags & CQueryFlag_Funcs)
         res += c_findfuncs(cp,tag);
+    if(query_flags & CQueryFlag_Defines)
+        res += c_finddefines(cp,tag);
+    if(query_flags & CQueryFlag_Enums)
+        res += c_findenums(cp,tag);
     return res;
 }
 
@@ -206,6 +238,9 @@ typedef enum c_tokentype
     XOR_ASSIGN,
     OR_ASSIGN,
     TYPE_NAME,
+
+    // not really a C type
+    POUND_DEFINE,
 } c_tokentype;
 #define C_KWS_START TYPEDEF
 
@@ -326,14 +361,50 @@ int c_lex(CParse *ctxt, StackElt *top);
 //     *pstack = stack;
 // }
 
-// skip to give tok. open_tok is optional
-static void parse_to_tok(CParse *ctxt, StackElt *stack, int n_stack, int tok, int open_tok) 
+// parse until the first occurance of one of the characters in the
+// passed string
+static ABINLINE void parse_to_chars(CParse *ctxt, StackElt *stack, int n_stack, char *toks)
+{
+    StackElt *top = 0;
+    int n;
+    int i;
+    if(!stack || !ctxt || !toks)
+        return;
+
+    if(n_stack == MAX_STACK)
+    {
+        parser_error(ctxt,top,"out of room on stack in %s. aborting.",__FUNCTION__);
+        return;
+    }
+    
+    n = strlen(toks);
+    PUSH();
+    for(;;)
+    {
+        top->tok = c_lex(ctxt,top);
+        if(!top->tok)
+            break;
+        for(i = 0; i < n; ++i)
+            if(toks[i] == top->tok)
+                return;
+    }
+}
+
+
+// matches pairing tokens like '{' and '}'
+static ABINLINE void parse_to_tok(CParse *ctxt, StackElt *stack, int n_stack, int tok, int open_tok)
 {
     StackElt *top = 0;
     int n_open = 1;
 
     if(!stack || !ctxt)
         return;
+
+    if(n_stack == MAX_STACK)
+    {
+        parser_error(ctxt,top,"out of room on stack in %s. aborting.",__FUNCTION__);
+        return;
+    }
     
     PUSH();
     while(n_open)
@@ -348,114 +419,39 @@ static void parse_to_tok(CParse *ctxt, StackElt *stack, int n_stack, int tok, in
     }
 }
 
-
-// static void parse_arglist(CParse *ctxt, StackElt **pstack, int *pn_stack)
-// {
-//     StackElt *t;
-//     StackElt *stack = *pstack;
-//     int n_stack = *pn_stack;
-//     int stack_start = n_stack;
-//     StackElt res = {0};
-//     int done = 0;
-//     res.tok = ARGLIST;
-//     while(!done)
-//     {
-//         NEXT_TOK();
-//         switch(TOP->tok)
-//         {
-//         case ')':
-//             done = 1;
-//             // fall through
-//         case ',':
-//             for(t = stack + stack_start; t < stack + n_stack-1; ++t)
-//                 if(t->tok == TOK)
-//                     break;
-//             if(t->tok != TOK)
-//                 TOK_ERROR(t,"unable to get var type");
-//             else
-//                 strs_find_add_str(&res.l.strs.s,&res.l.strs.n,t->l.str);
-
-//             if(done)
-//             {
-//                 n_stack = stack_start;
-//                 *TOP = res; // store result in entering slot on stack
-//             }
-//             break;
-//         case '(':
-//             parse_arglist(ctxt,&stack,&n_stack); // recurse
-//             break;
-//         case ';':
-//             // some kind of error
-//             done = 1;
-//             strs_cleanup(res.l.strs.s,res.l.strs.n);
-//             n_stack = stack_start - 1;
-//             break;
-//         default:
-//             break;
-//         };
-//     }
-//     *pn_stack = n_stack;
-//     *pstack = stack;    
-// }
-
-// static void parse_body(CParse *ctxt, Parse *res, StackElt *stack, int *pn_stack, char *referrer )
-// {
-//     int n_stack = *pn_stack;
-//     int stack_start = n_stack; // can't reduce past ths
-//     int can_see_decls = 1;
-//     int done = 0;
-//     StackElt *top = NULL;
-//     do
-//     {
-//         if(n_stack == MAX_STACK)
-//         {
-//             parser_error(ctxt,top,"out of room in stack");
-//             return;
-//         }
+static void parse_enum_body(CParse *ctxt, StackElt *stack, int n_stack, char *enum_typename )
+{
+    StackElt *top = NULL;
+    for(;;)
+    {
+        if(n_stack == MAX_STACK)
+        {
+            parser_error(ctxt,top,"out of room on stack in %s. aborting.",__FUNCTION__);
+            break;
+        }
         
-//         NEXT_TOK();
+        NEXT_TOK();
         
-//         switch(top->tok)
-//         {
-//         case '(':
-//             if(PREV_TOK(TOK))
-//                 c_add_funcref(ctxt,top[-1].line,top[-1].l.str,referrer);
-//             else
-//                 parse_to_tok(ctxt,&stack,&n_stack,')');
-//             n_stack = stack_start;
-//             break;
-//         case '{':
-//             parse_body(ctxt,res,&stack,&n_stack,referrer ); // recurse
-//             // parse_cleanup(&top->l.locs); todo: leak leak leak
-//             break;
-//         case '*':
-//             break;
-//         case CHAR_TOK:
-//         case SHORT_TOK:
-//         case INT_TOK:
-//         case LONG_TOK:
-//         case SIGNED:
-//         case UNSIGNED:
-//         case FLOAT_TOK:
-//         case DOUBLE:
-//         case VOID_TOK:
-//             break;
-//         case ';':
-//             if(can_see_decls && BP(0)->tok == TOK)
-//                 c_add_structref(ctxt,BP(0)->line,BP(0)->l.str,referrer, ctxt->line);
-//             n_stack = stack_start;
-//             break;
-//         case '}':
-//             done = 1;
-//             break;
-//         default:
-//             if(top->tok >= C_KWS_START)
-//                 can_see_decls = 0;
-//         };
-//     } while(!done);
-//     *pn_stack = stack_start;
-//     *pstack = stack;
-// }
+        if(top->tok == '}')
+            return;
+        
+        switch(top->tok)
+        {
+        case TOK:
+            c_add_enum(ctxt,top->l.str,enum_typename,top->line);
+            parse_to_chars(ctxt,stack,n_stack,",}");
+            if(top[1].tok == '}')
+                return;
+            break;
+        case ',':
+            break;
+        default:
+            parse_to_tok(ctxt,stack,n_stack,'}',0); // something's wrong
+            return;
+        }
+    }
+}
+
 
 int c_parse(CParse *ctxt)
 {
@@ -463,7 +459,7 @@ int c_parse(CParse *ctxt)
     StackElt *top = stack;
     int n_stack = 0;
     int res = 0;
-
+    char *s;
 //    c_debug = 1;
     for(;;)
     {
@@ -480,19 +476,18 @@ int c_parse(CParse *ctxt)
         case '{':
             if(PREV_TOKS3(TYPEDEF,STRUCT, TOK)) // struct decl
             {
-                c_add_struct(ctxt,top[-1].l.str,top->line);
+                c_add_struct(ctxt,top[-1].l.str,top[-1].line);
                 // todo: struct members
 //                parse_body(ctxt,&ctxt->structrefs,stack,&n_stack,str);
                 parse_to_tok(ctxt,stack,n_stack,'}','{');
                 parse_to_tok(ctxt,stack,n_stack,';',0);
                 n_stack = 0;
             }
-            else if(PREV_TOKS3(TYPEDEF,ENUM,TOK)) // struct decl
+            else if(PREV_TOKS2(ENUM,TOK)) // struct decl
             {
-                c_add_enum(ctxt,top[-1].l.str,top->line);
-                // todo: enum members
-//                parse_body(ctxt,&ctxt->structrefs,stack,&n_stack,str);
-                parse_to_tok(ctxt,stack,n_stack,'}','{');
+                s = top[-1].l.str;
+                c_add_enum_decl(ctxt,s,top[-1].line);
+                parse_enum_body(ctxt,stack,n_stack,s);
                 parse_to_tok(ctxt,stack,n_stack,';',0);
                 n_stack = 0;
             }
@@ -539,6 +534,11 @@ int c_parse(CParse *ctxt)
             // todo: some kind of global var init
             parse_to_tok(ctxt,stack,n_stack,';',0);
             n_stack = 0;
+            break;
+        case POUND_DEFINE:
+            c_add_define(ctxt,top->l.str, top->line);
+            n_stack = 0;
+            break;
         default:
             break;
         };
@@ -618,7 +618,6 @@ int c_lex(CParse *ctxt, StackElt *top)
     char *i;
     int j;
     int newline;
-    int first_line;
     S64 timer_start = timer_get();
 
 //    S64 diff_getc   = timer_get();
@@ -636,7 +635,6 @@ int c_lex(CParse *ctxt, StackElt *top)
 yylex_start:
     *tok = 0;
     i = tok;
-    first_line = top->line = ctxt->parse_line;
     newline = 0;
     while ((GETC()) != EOF && isspace(c))
     {
@@ -652,11 +650,25 @@ yylex_start:
             newline = 1;
         }
     }
+    top->line = ctxt->parse_line;
 
     if(newline && c == '#')
     {
         int last = 0;
-        // eat preprocessor (could do in grammer, but what the hey)
+        int found_pound_define = 0;
+        c = c_lex(ctxt, top);
+
+        if(!c)
+            LEX_RET(0);
+        
+        if(c == TOK && 0 == strcmp(top->l.str,"define"))
+        {
+            c = c_lex(ctxt, top);
+            if(c == TOK)
+                found_pound_define = 1;
+        }
+
+        // eat preprocessor (could do in grammar, but what the hey)
         // if line ends with \, continue to eat.
         for(;;)
         {
@@ -665,12 +677,15 @@ yylex_start:
                 if(!isspace(c))
                     last = c;
             }
+            ctxt->i_line--;
             if(last == '\\')
                 ctxt->parse_line++;
             else
                 break;
         }
         UNGETC();
+        if(found_pound_define)
+            LEX_RET(POUND_DEFINE);
         goto yylex_start;
     }
     else if(c == '/') // take care of comments

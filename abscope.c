@@ -24,7 +24,7 @@ static void usage(int argc, char**argv)
            "-v\t\t: verbose output\n"
            "-T\t\t: run tests\n"
            "-D[pt]\t\t: debug (p)arse, (t)iming\n"
-           "-Q[qrfa]\t\t: query for (s)tructs, struct(r)efs (f)unctions (a)ll\n"
+           "-Q[srfdea]\t\t: query for (s)tructs, struct(r)efs (f)unctions (d)efines (e)nums (a)ll\n"
 #ifdef _DEBUG
            "-Z\t\t: wait for debugger attach\n"
 #endif
@@ -108,7 +108,7 @@ static int abscope_test()
     break_if_debugging();
     TEST(0==c_parse_file(&cp,"test/foo.c"));
 
-    TEST(cp.structs.n_locs == 2);
+    TEST(cp.structs.n_locs == 3);
     li = cp.structs.locs + 0;
     TEST(0==strcmp(li->tag,"Foo"));
     TEST(0==stricmp(li->file,"test/Foo.c"));
@@ -120,6 +120,11 @@ static int abscope_test()
     TEST(0==stricmp(li->file,"test/Foo.c"));
     TEST(0==strcmp(li->context,"struct Bar"));
     TEST(li->line == 7);
+
+    li = cp.structs.locs + 2;
+    TEST(0==strcmp(li->tag,"Baz"));
+    TEST(0==strcmp(li->context,"enum Baz"));
+    TEST(li->line == 40);
 
     TEST(cp.funcs.n_locs == 2);
     li = cp.funcs.locs + 0;
@@ -133,6 +138,24 @@ static int abscope_test()
     TEST(0==stricmp(li->file,"test/Foo.c"));
     TEST(0==strcmp(li->context,"void CommonAlgoTables_Load(void)"));
     TEST(li->line == 20);
+
+    TEST(cp.defines.n_locs == 1);
+    li = cp.defines.locs + 0;
+    TEST(0==strcmp(li->tag,"FOO"));
+    TEST(0==stricmp(li->file,"test/Foo.c"));
+    TEST(0==strcmp(li->context,"#define FOO(X,Y,...) x = y + z;                 \\\r    line_2"));
+    TEST(li->line == 37);
+
+    TEST(cp.enums.n_locs == 3);
+    li = cp.enums.locs;
+    TEST(0==strcmp(li[0].tag,"Bar_A"));
+    TEST(0==strcmp(li[0].referrer,"Baz"));
+    TEST(0==strcmp(li[1].tag,"Bar_B"));    
+    TEST(0==strcmp(li[1].referrer,"Baz"));
+    TEST(0==strcmp(li[2].tag,"Bar_C"));    
+    TEST(0==strcmp(li[2].referrer,"Baz"));
+    TEST(li[0].line == 42);
+    TEST(li[2].line == 45);
 
     // ----------------------------------------
     // scan a bunch of files
@@ -238,6 +261,12 @@ int main(int argc, char **argv)
                 {
                     switch(*a)
                     {
+                    case 'd':
+                        c_query_flags |= CQueryFlag_Defines;
+                        break;
+                    case 'e':
+                        c_query_flags |= CQueryFlag_Enums;
+                        break;
                     case 's':
                         c_query_flags |= CQueryFlag_Structs;
                         break;

@@ -34,6 +34,17 @@ void CommonAlgoTables_Load(void)
 	}
 }
 
+#define FOO(X,Y,...) x = y + z;                 \
+    line_2
+
+typedef enum Baz
+{
+    Bar_A = 1,
+    Bar_B,
+    // last
+    Bar_C
+} Bar;
+    
 /*
 typedef struct Bar
 {

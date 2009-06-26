@@ -23,6 +23,9 @@ typedef struct CParse
     Parse funcs;
     Parse funcrefs;
 
+    Parse defines;
+    Parse enums;
+    
     // state info
     FILE *fp;
     char *parse_file;
@@ -58,6 +61,8 @@ typedef enum CQueryFlag
     CQueryFlag_Structs    = 1<<1,
     CQueryFlag_Funcs      = 1<<2,
     CQueryFlag_Structrefs = 1<<3,
+    CQueryFlag_Defines    = 1<<4,
+    CQueryFlag_Enums      = 1<<5,
 } CQueryFlag;
 
 int c_findstructs(CParse *cp, char *sn);
