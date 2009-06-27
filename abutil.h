@@ -106,4 +106,6 @@ void abfree(void *p);
 
 #define ABINLINE __forceinline
 
+#define INRANGE(N,S,E) (((N)>=(S)) && ((N)<E))
+
 #endif //ABUTIL_H

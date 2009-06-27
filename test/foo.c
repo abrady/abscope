@@ -13,7 +13,15 @@ typedef struct Bar
 void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )
 {
     int a;
-    abc b;
+    Foo b;
+    do
+    {
+        if(0)
+        {
+            Bar c;
+        }
+    }while(0);
+    
 }
 
 AUTO_STARTUP(AlgoTablesCommon);

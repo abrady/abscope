@@ -71,4 +71,7 @@ int c_query(CParse *cp, char *tag, int query_flags);
 
 void c_parse_print_time();
 extern int c_debug;
+
+int c_parse_test();
+
 #endif //C_PARSE_H

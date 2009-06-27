@@ -73,111 +73,15 @@ FILE *absfile_open_read(char *fn)
 #define TEST(COND) if(!(COND)) {printf("%s(%d):"#COND ": failed\n",__FILE__,__LINE__); break_if_debugging(); return -1;}
 
 
-BOOL dirscan_accept_c_files(char *path, char **ctxt)
-{
-    ctxt; // ignored
-    return path && (match_ext(path,"c") || match_ext(path,"h"));
-}
-
-
 static int abscope_test()
 {
-    int i;
-    DirScan dir_scan = {0};
-    CParse cp = {0};
-    LocInfo *li;
-    static char *structs_to_find[] = {
-        "dirent",
-        "Foo",
-        "Bar",
-        "Baz",
-    };
-    static char *structs_not_to_find[] = {
-        "Cat", // typedef only
-    };
-
     printf("TESTING\n");
 
     TEST(0==avltree_test());
     TEST(0==test_strpool());
     TEST(0==test_locinfo());
+    TEST(0==c_parse_test());
 
-    // ----------------------------------------
-    // parse a test file
-
-    break_if_debugging();
-    TEST(0==c_parse_file(&cp,"test/foo.c"));
-
-    TEST(cp.structs.n_locs == 3);
-    li = cp.structs.locs + 0;
-    TEST(0==strcmp(li->tag,"Foo"));
-    TEST(0==stricmp(li->file,"test/Foo.c"));
-    TEST(0==strcmp(li->context,"struct Foo"));
-    TEST(li->line == 1);
-
-    li = cp.structs.locs + 1;
-    TEST(0==strcmp(li->tag,"Bar"));
-    TEST(0==stricmp(li->file,"test/Foo.c"));
-    TEST(0==strcmp(li->context,"struct Bar"));
-    TEST(li->line == 7);
-
-    li = cp.structs.locs + 2;
-    TEST(0==strcmp(li->tag,"Baz"));
-    TEST(0==strcmp(li->context,"enum Baz"));
-    TEST(li->line == 40);
-
-    TEST(cp.funcs.n_locs == 2);
-    li = cp.funcs.locs + 0;
-    TEST(0==strcmp(li->tag,"test_func"));
-    TEST(0==stricmp(li->file,"test/Foo.c"));
-    TEST(0==strcmp(li->context,"void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )"));
-    TEST(li->line == 13);
-
-    li = cp.funcs.locs + 1;
-    TEST(0==strcmp(li->tag,"CommonAlgoTables_Load"));
-    TEST(0==stricmp(li->file,"test/Foo.c"));
-    TEST(0==strcmp(li->context,"void CommonAlgoTables_Load(void)"));
-    TEST(li->line == 20);
-
-    TEST(cp.defines.n_locs == 1);
-    li = cp.defines.locs + 0;
-    TEST(0==strcmp(li->tag,"FOO"));
-    TEST(0==stricmp(li->file,"test/Foo.c"));
-    TEST(0==strcmp(li->context,"#define FOO(X,Y,...) x = y + z;                 \\\r    line_2"));
-    TEST(li->line == 37);
-
-    TEST(cp.enums.n_locs == 3);
-    li = cp.enums.locs;
-    TEST(0==strcmp(li[0].tag,"Bar_A"));
-    TEST(0==strcmp(li[0].referrer,"Baz"));
-    TEST(0==strcmp(li[1].tag,"Bar_B"));    
-    TEST(0==strcmp(li[1].referrer,"Baz"));
-    TEST(0==strcmp(li[2].tag,"Bar_C"));    
-    TEST(0==strcmp(li[2].referrer,"Baz"));
-    TEST(li[0].line == 42);
-    TEST(li[2].line == 45);
-
-    // ----------------------------------------
-    // scan a bunch of files
-
-    printf("scanning ./test...");
-    scan_dir(&dir_scan,"./test",1,dirscan_accept_c_files,NULL);
-    printf("done.\n");
-
-    printf("found %i files:\n",dir_scan.n_files);
-    TEST(dir_scan.n_files >= 3);
-    for(i = 0; i < dir_scan.n_files;++i)
-    {
-        int r;
-        printf("scanning %s",dir_scan.files[i]);
-        r = c_parse_file(&cp,dir_scan.files[i]);
-        TEST(r>=0);
-    }
-
-    for(i = 0; i < DIMOF(structs_to_find); ++i)
-        TEST(0<c_findstructs(&cp,structs_to_find[i]));
-    for(i = 0; i < DIMOF(structs_not_to_find); ++i)
-        TEST(0==c_findstructs(&cp,structs_not_to_find[i]));
     return 0;
 }
 
