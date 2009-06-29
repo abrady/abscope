@@ -3,8 +3,9 @@
  *     All Rights Reserved
  *
  * Module Description:
- *
- *
+ * todo:
+ * - parse structs for members
+ * - build aa call tree
  ***************************************************************************/
 #include "c_parse.h"
 #include "abscope.h"
@@ -45,6 +46,9 @@ int c_on_processing_finished(CParse *cp)
     printf("%i funcs\n",cp->funcs.n_locs);
     res += absfile_write_parse("c_funcs.abs",&cp->funcs);
 
+    printf("%i funcrefs\n",cp->funcrefs.n_locs);
+    res += absfile_write_parse("c_funcrefs.abs",&cp->funcrefs);
+
     printf("%i defines\n",cp->defines.n_locs);
     res += absfile_write_parse("c_defines.abs",&cp->defines);
 
@@ -61,6 +65,8 @@ int c_load(CParse *cp)
         res += absfile_read_parse("c_structs.abs",&cp->structs);
     if(file_exists("c_funcs.abs"))
         res += absfile_read_parse("c_funcs.abs",&cp->funcs);
+    if(file_exists("c_funcrefs.abs"))
+        res += absfile_read_parse("c_funcrefs.abs",&cp->funcrefs);
     if(file_exists("c_structrefs.abs"))
         res += absfile_read_parse("c_structrefs.abs",&cp->structrefs);
     if(file_exists("c_defines.abs"))
@@ -88,6 +94,11 @@ int c_findfuncs(CParse *cp, char *name)
     return parse_print_search_tag(&cp->funcs,name);
 }
 
+int c_findfuncrefs(CParse *cp, char *sn)
+{
+    return parse_print_search_tag(&cp->funcrefs,sn);
+}
+
 int c_finddefines(CParse *cp, char *sn)
 {
     return parse_print_search_tag(&cp->defines,sn);
@@ -107,6 +118,8 @@ int c_query(CParse *cp, char *tag, int query_flags)
         res += c_findstructrefs(cp,tag);
     if(query_flags & CQueryFlag_Funcs)
         res += c_findfuncs(cp,tag);
+    if(query_flags & CQueryFlag_Funcrefs)
+        res += c_findfuncrefs(cp,tag);
     if(query_flags & CQueryFlag_Defines)
         res += c_finddefines(cp,tag);
     if(query_flags & CQueryFlag_Enums)

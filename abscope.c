@@ -24,7 +24,7 @@ static void usage(int argc, char**argv)
            "-v\t\t: verbose output\n"
            "-T\t\t: run tests\n"
            "-D[pt]\t\t: debug (p)arse, (t)iming\n"
-           "-Q[srfdea]\t\t: query for (s)tructs, struct(r)efs (f)unctions (d)efines (e)nums (a)ll\n"
+           "-Q[srfFdea]\t\t: query for (s)tructs, (S)tructrefs (f)unctions (F)uncrefs (d)efines (e)nums (a)ll\n"
 #ifdef _DEBUG
            "-Z\t\t: wait for debugger attach\n"
 #endif
@@ -174,11 +174,14 @@ int main(int argc, char **argv)
                     case 's':
                         c_query_flags |= CQueryFlag_Structs;
                         break;
-                    case 'r':
+                    case 'S':
                         c_query_flags |= CQueryFlag_Structrefs;
                         break;
                     case 'f':
                         c_query_flags |= CQueryFlag_Funcs;
+                        break;
+                    case 'F':
+                        c_query_flags |= CQueryFlag_Funcrefs;
                         break;
                     case 'a':
                         c_query_flags = 0xffffffff;

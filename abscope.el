@@ -1,7 +1,7 @@
 ;; ;;
 ;; process-buffer : the buffer for a process
 ;; process-mark   : 
-(setq abscope-dir "c:/src/crossroads")
+(setq abscope-dir "c:/src")
 (setq abscope-file "abscope-queries.org")
 (setq abscope-exe "c:/abs/abscope/abscope.exe")
 
@@ -26,7 +26,7 @@ stag:")
 (defun abq (tag)
   (interactive (list (read-string "The string to search for:"
  								  (readWordOrRegion))))
-  (abscope-query "srf" tag))
+  (abscope-query "a" tag))
  
 
 
