@@ -27,6 +27,7 @@ void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )
 AUTO_STARTUP(AlgoTablesCommon);
 void CommonAlgoTables_Load(void)
 {
+/*
 	loadstart_printf("Loading CommonAlgoTables...");
 
 	StructInit(parse_CommonAlgoTables, &g_CommonAlgoTables);
@@ -40,6 +41,7 @@ void CommonAlgoTables_Load(void)
 		// Have reload take effect immediately
 		FolderCacheSetCallback(FOLDER_CACHE_CALLBACK_UPDATE, "defs/rewards/algotables_common.data", CommonAlgoTables_ReloadCallback);
 	}
+*/
 }
 
 #define FOO(X,Y,...) x = y + z;                 \
@@ -52,6 +54,13 @@ typedef enum Baz
     // last
     Bar_C
 } Bar;
+
+void test_func2( Entity *pEnt, char *RewardTableName, char *ChoiceName )
+{
+    foo(pEnt,a,b);
+    if(0==strcmp("foo","bar"))
+        return;
+}
     
 /*
 typedef struct Bar

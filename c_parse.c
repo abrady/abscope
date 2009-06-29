@@ -458,6 +458,67 @@ static void parse_enum_body(CParse *ctxt, StackElt *stack, int n_stack, char *en
     }
 }
 
+// expressions:
+// assignment expression
+// conditional expression
+// expression, expression
+static void parse_paren_expression(CParse *ctxt, StackElt *stack, int n_stack, char *func_name)
+{
+    StackElt *top = NULL;
+    int n_stack_in = n_stack;
+
+    for(;;)
+    {
+        if(n_stack == MAX_STACK)
+        {
+            parser_error(ctxt,top,"out of room on stack in %s. aborting.",__FUNCTION__);
+            break;
+        }
+        
+        NEXT_TOK();        
+        if(top->tok == ')')
+            return;
+        switch(top->tok)
+        {
+        case '(':
+            if(top[-1].tok == TOK)
+                c_add_funcref(ctxt,top-1,func_name);
+            parse_paren_expression(ctxt,stack,n_stack,func_name);
+            n_stack = n_stack_in;
+            break;
+        case TOK: // keep this around
+            
+            break;
+//             // assignment
+//         case '=':
+//             // conditional exprs
+//         case '?':
+//         case ':':
+//             // logical ops
+//         case AND_OP:
+//         case OR_OP:
+//             // binary ops
+//         case '|':
+//         case '^':
+//         case '&':
+//             // equality
+//         case LE_OP:
+//         case GE_OP:
+//         case EQ_OP:
+//         case NE_OP:
+//             // shift
+//         case LEFT_OP:
+//         case RIGHT_OP:
+//         case '+':
+//         case '-':
+            // blah blah blah. all I care about is function calls
+        default:
+            n_stack = n_stack_in;
+            break;
+        };
+    }
+}
+
 static void parse_func_body(CParse *ctxt, StackElt *stack, int n_stack, char *func_name)
 {
     StackElt *top = NULL;
@@ -482,11 +543,9 @@ static void parse_func_body(CParse *ctxt, StackElt *stack, int n_stack, char *fu
             var_decls_allowed = 0;
             break;
         case '(':
+            parse_paren_expression(ctxt,stack,n_stack,func_name);
             if(top[-1].tok == TOK)
                 c_add_funcref(ctxt,top-1,func_name);
-            else
-                var_decls_allowed = 0;
-            parse_to_tok(ctxt,stack,n_stack,')','(');
             n_stack = n_stack_in;
             break;
         case TOK:
@@ -643,10 +702,12 @@ int c_parse(CParse *ctxt)
     }
     return res;
 }
-
+// todo: parse '==' properly
 int c_lex(CParse *ctxt, StackElt *top)
 {
-    static const struct { char *kw; int tok; } kws[] = {
+    typedef struct KwTokPair { char *kw; int tok; } KwTokPair;
+    typedef struct OpTokPair { char kw[4]; int tok;} OpTokPair;    
+    static const KwTokPair kws[] = {
         { "AUTO_COMMAND",      AUTO_COMMAND },
 //        { "NOCONST",           NOCONST_DECL },
 //        { "const",             CONST_DECL },
@@ -669,7 +730,6 @@ int c_lex(CParse *ctxt, StackElt *top)
         { "struct", STRUCT },
         { "union", UNION },
         { "enum", ENUM },
-        { "...", ELLIPSIS },
         { "case", CASE },
         { "default", DEFAULT },
         { "if", IF },
@@ -683,9 +743,16 @@ int c_lex(CParse *ctxt, StackElt *top)
         { "break", BREAK },
         { "return", RETURN },
         { "sizeof", SIZEOF },
+    };
+     
+    // NOTE: none of these work
+    static const OpTokPair ops[] = {
+        { "...", ELLIPSIS },
         { "->", PTR_OP },
-        { "++", INC_OP },
         { "--", DEC_OP },
+        { "-=", SUB_ASSIGN },
+        { "++", INC_OP },
+        { "+=", ADD_ASSIGN },
         { "<<", LEFT_OP },
         { ">>", RIGHT_OP },
         { "<=", LE_OP },
@@ -697,8 +764,6 @@ int c_lex(CParse *ctxt, StackElt *top)
         { "*=", MUL_ASSIGN },
         { "/=", DIV_ASSIGN },
         { "%=", MOD_ASSIGN },
-        { "+=", ADD_ASSIGN },
-        { "-=", SUB_ASSIGN },
         { "<<=", LEFT_ASSIGN },
         { ">>=", RIGHT_ASSIGN },
         { "&=", AND_ASSIGN },
@@ -867,8 +932,41 @@ yylex_start:
     *i = 0;
     if(!*tok) // no characters grabbed. return
     {
+        OpTokPair const *mos[DIMOF(ops)] = {0};
+        int n_mos = 0;
         if(c_debug)
             fprintf(stderr,"character token(%c)\n",c);
+        // special multi-char non-words
+        for(j = 0; j < DIMOF(ops); ++j)
+        {
+            if(*ops[j].kw == c)
+                mos[n_mos++] = ops + j;
+        }
+
+        // try to match operators like <<=
+        for(j = 0; j < n_mos; ++j)
+        {
+            char const *kw = mos[j]->kw;
+            int n_kw = strlen(kw);
+            int k;
+            for(k = 1; k < n_kw; ++k)
+            {
+                if(kw[k] != GETC())
+                    break;
+            }
+            // match found
+            if(k == n_kw)
+                LEX_RET(mos[j]->tok);
+
+            // unwind the extra chars fetched
+            UNGETC();
+            for(k--;k>0;--k)
+            {
+                c = kw[k];
+                UNGETC();
+            }
+            c = kw[0];
+        }
         LEX_RET(c == EOF?0:c);
     }
     
@@ -950,9 +1048,9 @@ int c_parse_test()
     li = cp.structs.locs + 2;
     TEST(0==strcmp(li->tag,"Baz"));
     TEST(0==strcmp(li->context,"enum Baz"));
-    TEST(li->line == 48);
+    TEST(li->line == 50);
     
-    TEST(cp.funcs.n_locs == 2);
+    TEST(cp.funcs.n_locs == 3);
     li = cp.funcs.locs + 0;
     TEST(0==strcmp(li->tag,"test_func"));
     TEST(0==stricmp(li->file,"test/Foo.c"));
@@ -963,14 +1061,14 @@ int c_parse_test()
     TEST(0==strcmp(li->tag,"CommonAlgoTables_Load"));
     TEST(0==stricmp(li->file,"test/Foo.c"));
     TEST(0==strcmp(li->context,"void CommonAlgoTables_Load(void)"));
-    TEST(li->line == 20);
+    TEST(li->line == 28);
     
     TEST(cp.defines.n_locs == 1);
     li = cp.defines.locs + 0;
     TEST(0==strcmp(li->tag,"FOO"));
     TEST(0==stricmp(li->file,"test/Foo.c"));
     TEST(0==strcmp(li->context,"#define FOO(X,Y,...) x = y + z;                 \\\r    line_2"));
-    TEST(li->line == 37);
+    TEST(li->line == 47);
     
     TEST(cp.enums.n_locs == 3);
     li = cp.enums.locs;
@@ -980,8 +1078,18 @@ int c_parse_test()
     TEST(0==strcmp(li[1].referrer,"Baz"));
     TEST(0==strcmp(li[2].tag,"Bar_C"));    
     TEST(0==strcmp(li[2].referrer,"Baz"));
-    TEST(li[0].line == 50);
-    TEST(li[2].line == 53);   
+    TEST(li[0].line == 52);
+    TEST(li[2].line == 55);   
+
+    TEST(cp.funcrefs.n_locs == 2);
+    li = cp.funcrefs.locs;
+    TEST(0==strcmp(li->tag,"foo"));
+    TEST(0==strcmp(li->referrer,"test_func2"));
+    TEST(li->line == 60);
+    li++;
+    TEST(0==strcmp(li->tag,"strcmp"));
+    TEST(0==strcmp(li->referrer,"test_func2"));
+    TEST(li->line == 61);
 
     // ----------------------------------------
     // scan a bunch of files
