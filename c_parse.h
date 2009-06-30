@@ -64,6 +64,7 @@ typedef enum CQueryFlag
     CQueryFlag_Funcrefs   = 1<<4,
     CQueryFlag_Defines    = 1<<6,
     CQueryFlag_Enums      = 1<<7,
+    CQueryFlag_Srcfile    = 1<<8,
 } CQueryFlag;
 
 int c_findstructs(CParse *cp, char *sn);

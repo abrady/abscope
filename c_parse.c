@@ -6,6 +6,7 @@
  * todo:
  * - parse structs for members
  * - build aa call tree
+ * - search list of files
  ***************************************************************************/
 #include "c_parse.h"
 #include "abscope.h"
@@ -109,30 +110,84 @@ int c_findenums(CParse *cp, char *sn)
     return parse_print_search_tag(&cp->enums,sn);
 }
 
+int c_findfuncsrcfile(CParse *cp, char *sn)
+{
+    int res = 0;
+    AvlNode *node;
+    int i;
+    AvlTree t = {0};
+    Parse *ps[128];
+    int n = 0;
+    ps[n++] = &cp->structs;
+    ps[n++] = &cp->structrefs;
+    ps[n++] = &cp->funcs;
+    ps[n++] = &cp->funcrefs;
+    ps[n++] = &cp->defines;
+    ps[n++] = &cp->enums;
+    for(i = 0; i<n; ++i)
+    {
+        int j;
+        for(j = 0; j<ps[i]->n_locs; ++j)
+        {
+            LocInfo *li = ps[i]->locs + j;
+            char *fn = fname_nodir(li->file);
+            if(0 == stricmp(fn,sn) && !avltree_find(&t,li->file))
+                avltree_insert(&t,li->file);
+        }
+    }
+    node = t.root;
+    while(node)
+    {
+        if(node->left && node->left->p)
+        {
+            node = node->left;
+        }
+        else if(node->right && node->right->p)
+        {
+            node = node->right;
+        }
+        else
+        {
+            printf("** [[file:%s::%i][%s]] file %s\n", node->p,1, fname_nodir(node->p), node->p);
+            node->p = NULL;
+            node = node->up;
+            res++;
+        }
+
+    }
+    avltree_cleanup(&t);
+    return res;
+}
+
+
+
 int c_query(CParse *cp, char *tag, int query_flags)
 {
     int res = 0;
     if(query_flags & CQueryFlag_Structs)
         res += c_findstructs(cp,tag);
-    if(query_flags & CQueryFlag_Structrefs)
-        res += c_findstructrefs(cp,tag);
-    if(query_flags & CQueryFlag_Funcs)
-        res += c_findfuncs(cp,tag);
-    if(query_flags & CQueryFlag_Funcrefs)
-        res += c_findfuncrefs(cp,tag);
-    if(query_flags & CQueryFlag_Defines)
-        res += c_finddefines(cp,tag);
     if(query_flags & CQueryFlag_Enums)
         res += c_findenums(cp,tag);
+    if(query_flags & CQueryFlag_Funcs)
+        res += c_findfuncs(cp,tag);
+    if(query_flags & CQueryFlag_Defines)
+        res += c_finddefines(cp,tag);
+    if(query_flags & CQueryFlag_Structrefs)
+        res += c_findstructrefs(cp,tag);
+    if(query_flags & CQueryFlag_Funcrefs)
+        res += c_findfuncrefs(cp,tag);
+    if(query_flags & CQueryFlag_Srcfile)
+        res += c_findfuncsrcfile(cp,tag);
     return res;
 }
 
 void c_parse_print_time(CParse *cp)
 {
-    printf("lexing took %f overall:\n"
-           "getc took %f\n",
-           timer_elapsed(cp->lex_timing), 
-           timer_elapsed(cp->getc_timing));
+    printf("c_parse total %f:\n"
+//           "getc took %f\n"
+           ,timer_elapsed(cp->lex_timing)
+//           ,timer_elapsed(cp->getc_timing)
+        );
 }
 
 int c_ext(char *file)
@@ -795,9 +850,10 @@ int c_lex(CParse *ctxt, StackElt *top)
     int j;
     int newline;
     S64 timer_start = timer_get();
+//    S64 timer_getc;
+// timing each getch call has too much overhead
+// #define GETC() ((timer_getc = timer_get()),(ctxt->line[(ctxt->i_line++)%DIMOF(ctxt->line)] = (char)(c = getc(ctxt->fp))),(ctxt->getc_timing += timer_diff(timer_getc)),c)
 
-//    S64 diff_getc   = timer_get();
-//#define GETC() (ctxt->getc_timing += timer_diff_reset(&diff_getc ), getc(ctxt->fp))
 #define GETC() ((ctxt->line[(ctxt->i_line++)%DIMOF(ctxt->line)] = (char)(c = getc(ctxt->fp))),c)
 #define UNGETC() (ctxt->i_line--,ungetc(c, ctxt->fp)) 
 #define LEX_RET(VAL) { ctxt->lex_timing += timer_diff(timer_start); \

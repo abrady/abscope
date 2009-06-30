@@ -24,7 +24,7 @@ static void usage(int argc, char**argv)
            "-v\t\t: verbose output\n"
            "-T\t\t: run tests\n"
            "-D[pt]\t\t: debug (p)arse, (t)iming\n"
-           "-Q[srfFdea]\t\t: query for (s)tructs, (S)tructrefs (f)unctions (F)uncrefs (d)efines (e)nums (a)ll\n"
+           "-Q[sSfFdeca]\t\t: query for (s)tructs, (S)tructrefs (f)unctions (F)uncrefs (d)efines sr(c)file (e)nums (a)ll\n"
 #ifdef _DEBUG
            "-Z\t\t: wait for debugger attach\n"
 #endif
@@ -89,6 +89,10 @@ static CParse g_cp;
 
 int main(int argc, char **argv)
 {
+    S64 query_timer;
+    double query_timer_load = 0;
+    double query_timer_query = 0;
+
     int res = 0;
     int print_timers = 0;
     S64 timer_start;
@@ -183,6 +187,9 @@ int main(int argc, char **argv)
                     case 'F':
                         c_query_flags |= CQueryFlag_Funcrefs;
                         break;
+                    case 'c':
+                        c_query_flags |= CQueryFlag_Srcfile;
+                        break;
                     case 'a':
                         c_query_flags = 0xffffffff;
                         break;
@@ -246,9 +253,14 @@ int main(int argc, char **argv)
 
     if(query_str)
     {
+        query_timer = timer_get();
         if(c_load(cp)<0)
             return -1;
+        query_timer_load = timer_diffelapsed(query_timer);
+
+        query_timer = timer_get();
         res = c_query(cp,query_str,c_query_flags);
+        query_timer_query = timer_diffelapsed(query_timer);
         goto end;
     }
     
@@ -256,8 +268,12 @@ end:
     if(print_timers)
     {
         printf("process took %f\n"
+               "data load took %f\n"
+               "query run took %f\n"
                "allocs took %f seconds\n", 
                timer_diffelapsed(timer_start),
+               query_timer_load,
+               query_timer_query,
                alloc_time());
         locinfo_print_time();
         c_parse_print_time(cp);

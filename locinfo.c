@@ -10,6 +10,7 @@
 #include "abserialize.h"
 
 static S64 locinfo_timer = 0;
+static S64 locinfo_read_timer = 0;
 static S64 locinfo_parse_find_add_str_timer = 0;
 #define LOCINFO_TIMER_START TIMER_START
 #define LOCINFO_TIMER_END() TIMER_END(locinfo_timer)
@@ -38,11 +39,13 @@ ABINLINE int locinfo_write(FILE *fp, LocInfo *l)
 ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
 {
     int res = 0;
+    TIMER_START();
     res += binread_string(fp,&l->tag);
     res += binread_string(fp,&l->referrer);
     res += binread_string(fp,&l->context);
     res += binread_string(fp,&l->file);
     res += binread_int(fp,&l->line);
+    TIMER_END(locinfo_read_timer);
     return res;
 }
 
@@ -207,10 +210,12 @@ int parse_print_search_tag(Parse *p,char *tag)
 
 void locinfo_print_time()
 {
-    printf("locinfo\ntotal:\t\t%f\n"
-           "find_add_str:\t\t%f\n",
-           timer_elapsed(locinfo_timer),
-           timer_elapsed(locinfo_parse_find_add_str_timer)
+    printf("locinfo total:\t\t\t%f\n"
+           "\tfind_add_str:\t\t\t%f\n"
+           "\tlocinfo_read:\t\t\t%f\n"
+           ,timer_elapsed(locinfo_timer)
+           ,timer_elapsed(locinfo_parse_find_add_str_timer)
+           ,timer_elapsed(locinfo_read_timer)
         );
 }
 

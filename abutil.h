@@ -27,6 +27,7 @@ typedef __int64 S64;
 typedef volatile __int64 VS64;
 typedef volatile unsigned __int64 VU64;
 
+#define ABINLINE __forceinline
 
 #define _CRT_SECURE_NO_WARNINGS 1
 #include <stdio.h>
@@ -63,6 +64,8 @@ typedef struct DirScan
 } DirScan;
 
 int file_exists(char *fname);
+char *fname_nodir(char *fname);
+
 char* str_downcase(char *str);
 int match_ext(char *fn, char *ext); // pass "c" not ".c"
 
@@ -76,9 +79,9 @@ void scan_dir(DirScan *d, const char *adir, int recurse_dir,dirscan_fp add_file_
 #define DEREF2(s,m,m2) ((s)?DEREF((s)->m,m2):0)
 #define MAX(a,b) (((a) > (b))?(a):(b))
 
-S64 timer_get();
-S64 timer_diff(S64 timer_start);
-S64 timer_diff_reset(S64 *timer_start);
+ABINLINE S64 timer_get()                        { S64 tmp; if(!QueryPerformanceCounter((LARGE_INTEGER*)&tmp)) return 0; return tmp;}
+ABINLINE S64 timer_diff(S64 timer_start)        { S64 cur = timer_get(); return cur - timer_start; }
+ABINLINE S64 timer_diff_reset(S64 *timer_start) { S64 diff; if(!timer_start) return 0; diff = timer_diff(*timer_start); *timer_start = timer_get(); return diff;} 
 
 double timer_elapsed(S64 timer);
 double timer_diffelapsed(S64 timer);
@@ -103,8 +106,6 @@ void abfree(void *p);
 #define realloc abrealloc
 #define free    abfree
 #endif
-
-#define ABINLINE __forceinline
 
 #define INRANGE(N,S,E) (((N)>=(S)) && ((N)<E))
 

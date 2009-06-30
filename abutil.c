@@ -66,24 +66,11 @@ char* str_downcase(char *str)
     return p;
 }
 
-S64 timer_get()
-{
-    S64 tmp;
-    if(!QueryPerformanceCounter((LARGE_INTEGER*)&tmp))
-        return 0;
-    return tmp;
-}
 
 static S64 alloc_timer = 0;
 
 #define ALLOC_TIMER_START() S64 timer_start = timer_get()
 #define ALLOC_TIMER_END()   alloc_timer += timer_diff(timer_start)
-
-S64 timer_diff(S64 timer_start)
-{
-    S64 cur = timer_get();
-    return cur - timer_start;
-}
 
 #ifdef TIME_ALLOCS
 #undef calloc
@@ -145,12 +132,17 @@ double timer_elapsed(S64 timer)
     return timer / (double)freq;
 }
 
-S64 timer_diff_reset(S64 *timer_start)
+
+char *fname_nodir(char *fname)
 {
-    S64 diff;
-    if(!timer_start)
-        return 0;
-    diff = timer_diff(*timer_start);
-    *timer_start = timer_get();
-    return diff;
+    char *tmp;
+    if(!fname)
+        return NULL;
+    tmp = strrchr(fname,'/');
+    if(tmp)
+        return tmp + 1;
+    tmp = strrchr(fname,'\\');
+    if(tmp)
+        return tmp+1;
+    return NULL;
 }
