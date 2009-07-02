@@ -7,6 +7,7 @@
  * - parse structs for members
  * - build aa call tree
  * - search list of files
+ * - fast load
  ***************************************************************************/
 #include "c_parse.h"
 #include "abscope.h"
@@ -358,6 +359,11 @@ static void c_add_funcref(CParse *ctxt, StackElt *elt, char *funcref_ctxt)
     parse_add_locinfo(&ctxt->funcrefs,ctxt->parse_file,elt->line,elt->l.str,funcref_ctxt,ctxt->line); 
 }
 
+static void c_add_structmember(CParse *ctxt, StackElt *elt, char *member_type, char *parent_struct)
+{
+    parse_add_locinfof(&ctxt->structrefs,ctxt->parse_file,elt->line,elt->l.str,member_type,"struct %s: %s", parent_struct,ctxt->line); 
+}
+
 static void c_add_define(CParse *ctxt, char *define, int line)
 {
     parse_add_locinfo(&ctxt->defines,ctxt->parse_file,line,define,NULL,ctxt->line);
@@ -386,10 +392,10 @@ static int parser_error(CParse *ctxt, StackElt *s, char *fmt,...)
 int c_debug;
 int c_lex(CParse *ctxt, StackElt *top);
 
-#define STACK(OFFSET) (stack+n_stack-1+OFFSET)
-#define PREV_TOK(A) ((n_stack >= 2) && STACK(-1)->tok == A)
-#define PREV_TOKS2(A,B) ((n_stack >= 3) && STACK(-2)->tok == A && STACK(-1)->tok == B)
-#define PREV_TOKS3(A,B,C) ((n_stack >= 4) && STACK(-3)->tok == A && STACK(-2)->tok == B && STACK(-1)->tok == C)
+
+#define PREV_TOK(A) ((n_stack >= 2) && top[-1].tok == A)
+#define PREV_TOKS2(A,B) ((n_stack >= 3) && top[-2].tok == A && top[-1].tok == B)
+#define PREV_TOKS3(A,B,C) ((n_stack >= 4) && top[-3].tok == A && top[-2].tok == B && top[-1].tok == C)
 //#define TOP (stack + n_stack - 1)
 
 #define PUSH() ((top = (stack + n_stack++)),ZeroStruct(top))
@@ -400,7 +406,7 @@ int c_lex(CParse *ctxt, StackElt *top);
     if(!top->tok)                                                    \
         break;
 
-#define BP(I) (&stack[stack_start+(I)])    
+
 
 // pushes all refs and reflist into a single reflist and puts it at 
 // location 'start' 
@@ -676,6 +682,44 @@ static void parse_func_body(CParse *ctxt, StackElt *stack, int n_stack, char *fu
     }
 }
 
+static void parse_struct_body(CParse *ctxt, StackElt *stack, int n_stack, char *struct_name)
+{
+    StackElt *tmp;
+    StackElt *top = NULL;
+    int n_stack_in = n_stack;
+
+    for(;;)
+    {
+        if(n_stack == MAX_STACK)
+        {
+            parser_error(ctxt,top,"out of room on stack in %s. aborting.",__FUNCTION__);
+            break;
+        }
+        
+        NEXT_TOK();        
+        if(top->tok == '}')
+        {
+            parse_to_tok(ctxt,stack,n_stack,';',0);
+            return;
+        }
+        switch(top->tok)
+        {
+        case ';':
+            for(tmp = stack + n_stack_in; tmp < top; ++tmp)
+                if(tmp->tok == TOK || IS_INTRINSIC_TYPE(tmp->tok))
+                    break;
+            if(tmp < top  && top[-1].tok == TOK) 
+                c_add_structmember(ctxt,top-1,tmp->l.str,struct_name);
+            n_stack = n_stack_in;
+            break;
+        case '{':
+            parse_to_tok(ctxt,stack,n_stack,'}','{');
+            break;
+        }
+    }
+    
+}
+
 
 int c_parse(CParse *ctxt)
 {
@@ -703,8 +747,7 @@ int c_parse(CParse *ctxt)
                 c_add_struct(ctxt,top[-1].l.str,top[-1].line);
                 // todo: struct members
 //                parse_body(ctxt,&ctxt->structrefs,stack,&n_stack,str);
-                parse_to_tok(ctxt,stack,n_stack,'}','{');
-                parse_to_tok(ctxt,stack,n_stack,';',0);
+                parse_struct_body(ctxt,stack,n_stack,top[-1].l.str);
                 n_stack = 0;
             }
             else if(PREV_TOKS2(ENUM,TOK)) // struct decl
@@ -1091,8 +1134,28 @@ int c_parse_test()
     break_if_debugging();
     TEST(0==c_parse_file(&cp,"test/foo.c")); // todo: embed and write out if not existing.
 
-    TEST(cp.structrefs.n_locs == 2);
+    TEST(cp.structrefs.n_locs == 6);
     li = cp.structrefs.locs;
+    TEST(0==strcmp(li->tag,"a"));
+    TEST(0==strcmp(li->referrer,"int"));
+    TEST(0==strbeginswith(li->context,"struct Foo"));
+    TEST(li->line == 3);
+    li++;
+    TEST(0==strcmp(li->tag,"b"));
+    TEST(0==strcmp(li->referrer,"char"));
+    TEST(0==strbeginswith(li->context,"struct Foo"));
+    TEST(li->line == 4);
+    li++;
+    TEST(0==strcmp(li->tag,"bar_a"));
+    TEST(0==strcmp(li->referrer,"int"));
+    TEST(0==strbeginswith(li->context,"struct Bar"));
+    TEST(li->line == 9);
+    li++;
+    TEST(0==strcmp(li->tag,"baz_b"));
+    TEST(0==strcmp(li->referrer,"char"));
+    TEST(0==strbeginswith(li->context,"struct Bar"));
+    TEST(li->line == 9);
+    li++;
     TEST(0==strcmp(li->tag,"Foo"));
     TEST(0==strcmp(li->referrer,"test_func"));
     TEST(li->line == 16);

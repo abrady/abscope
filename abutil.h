@@ -74,6 +74,7 @@ void scan_dir(DirScan *d, const char *adir, int recurse_dir,dirscan_fp add_file_
 
 #define stracpy(DST,SRC) (strncpy((DST),SRC,DIMOF(DST)),(DST)[DIMOF(DST)-1]=0,(DST))
 #define stricmp _stricmp
+ABINLINE int strbeginswith(char *dest, char *src) {int n; if(!dest || !src) return FALSE; n = strlen(src); return strncmp(dest,src,n);}
 
 #define DEREF(s,m) ((s)?(s)->m:0)
 #define DEREF2(s,m,m2) ((s)?DEREF((s)->m,m2):0)
