@@ -193,6 +193,25 @@ AvlNode *avltree_findnode(AvlTree *t, char *p)
     return n;
 }
 
+
+static int avlnode_traverse(AvlNode *n,AvlTreeTraverser fp, void *ctxt)
+{
+    int res = 0;
+    if(n->left)
+        res = avlnode_traverse(n->left,fp,ctxt);
+    if(0 == res && n->right)
+        res = avlnode_traverse(n->right,fp,ctxt);
+    if(0 != res)
+        return res;
+    return fp(n,ctxt);
+}
+int avltree_traverse(AvlTree *tree, AvlTreeTraverser fp, void *ctxt)
+{
+    if(!tree || !tree->root || !fp)
+        return 0;
+    return avlnode_traverse(tree->root,fp,ctxt);    
+}
+
 #define TEST(COND) if(!(COND)) {printf(#COND ": failed\n"); break_if_debugging(); return -1;}
 int avltree_test()
 {
@@ -267,3 +286,4 @@ int avltree_test()
     printf("done\n");
     return 0;
 }
+

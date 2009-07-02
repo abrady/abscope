@@ -8,7 +8,7 @@
  ***************************************************************************/
 #include "abscope.h"
 #include "strs.h"
-
+#include "abserialize.h"
 
 char *strs_find_str(char **strs, int n_strs, char *s)
 {
@@ -142,4 +142,17 @@ void strs_cleanup(char **strs, int n_strs)
         free(strs[i]);
         strs[i] = 0;
     }
+}
+
+static int strpool_tree_traverser_cb(AvlNode *n, void *ctxt)
+{
+    FILE *fp = (FILE*)ctxt;
+    return string_binwrite(fp,n->p);
+}
+
+int strpool_binwrite(FILE *fp, StrPool *pool)
+{
+    if(!pool)
+        return 0;
+    return avltree_traverse(&pool->tree,&strpool_tree_traverser_cb,fp);
 }

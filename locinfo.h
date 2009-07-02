@@ -29,6 +29,7 @@ typedef struct TagRef
 
 typedef struct Parse
 {
+    StrPool strs;
     struct LocInfo *locs;
     int       n_locs;
 } Parse;

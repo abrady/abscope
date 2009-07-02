@@ -25,28 +25,47 @@ static void locinfo_cleanup(LocInfo *l)
 }
 
 
-ABINLINE int locinfo_write(FILE *fp, LocInfo *l)
+static ABINLINE int locinfo_write(FILE *fp, LocInfo *l)
 {
     int res = 0;
-    res += binwrite_string(fp,l->tag);
-    res += binwrite_string(fp,l->referrer);
-    res += binwrite_string(fp,l->context);
-    res += binwrite_string(fp,l->file);
-    res += binwrite_int(fp,l->line);
+    res += string_binwrite(fp,l->tag);
+    res += string_binwrite(fp,l->referrer);
+    res += string_binwrite(fp,l->context);
+    res += string_binwrite(fp,l->file);
+    res += int_binwrite(fp,l->line);
     return res;
 }
 
-ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
+static ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
 {
     int res = 0;
     TIMER_START();
-    res += binread_string(fp,&l->tag);
-    res += binread_string(fp,&l->referrer);
-    res += binread_string(fp,&l->context);
-    res += binread_string(fp,&l->file);
-    res += binread_int(fp,&l->line);
+    res += string_binread(fp,&l->tag);
+    res += string_binread(fp,&l->referrer);
+    res += string_binread(fp,&l->context);
+    res += string_binread(fp,&l->file);
+    res += int_binread(fp,&l->line);
     TIMER_END(locinfo_read_timer);
     return res;
+}
+
+static int parse_write(FILE *fp, Parse *p)
+{
+    int i;
+    LocInfo *lis;
+    int n_lis;
+    int res = 0;
+    if(!p)
+        return 0;
+    lis = p->locs;
+    n_lis = p->n_locs;
+    res += int_binwrite(fp,n_lis);                  // num structs
+    res += mem_binwrite(fp,lis,sizeof(*lis)*n_lis); // locinfos
+    res += strpool_binwrite(fp,&p->strs);
+    for(i = 0; i < n_lis; ++i)
+    {
+        
+    }
 }
 
 

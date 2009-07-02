@@ -30,6 +30,11 @@ void avltree_cleanup(AvlTree *t);
 char *avltree_find(AvlTree *t, char *p);
 AvlNode *avltree_findnode(AvlTree *t, char *p);
 
+typedef int (*AvlTreeTraverser)(AvlNode *node,void *ctxt);
+
+int avltree_traverse(AvlTree *tree, AvlTreeTraverser fp, void *ctxt);
+
+
 int avltree_test();
 
 #endif //ABTREE_H

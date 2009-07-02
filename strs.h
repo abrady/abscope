@@ -32,6 +32,9 @@ void strpool_add_strblock(StrPool *pool, char *strblock, int n);
 
 void strpool_cleanup(StrPool *p);
 
+int strpool_binwrite(FILE *fp, StrPool *pool);
+
+
 int test_strpool(void);
 
 #endif //STRS_H
