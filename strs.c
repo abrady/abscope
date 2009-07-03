@@ -102,17 +102,22 @@ int test_strpool(void)
     return 0;
 }
 
-void strpool_add_strblock(StrPool *pool, char *strblock, int n)
+// a contiguous block of strs
+void strpool_add_strblock(StrPool *pool, char *strblock, char *end)
 {
-    char *end = strblock + n;
     char *s;
     if(!pool || !strblock)
         return;
     s = strblock;
     while(s < end)
     {
-        strpool_add_str(pool,s);
-        s += strlen(s)+1;
+        int n = strlen(s) + 1;
+        if(!strpool_find_str(pool,s))
+        {
+            strs_add_str(&pool->strs,&pool->n_strs,s);
+            avltree_insert(&pool->tree,s);
+        }
+        s += n;
     }
 }
 
@@ -166,7 +171,7 @@ char *strblock_from_strpool(int *res_block_len, StrPool *pool)
     char *s;
     for(i = 0; i < pool->n_strs; ++i)
         n_res += (strlen(pool->strs[i]) + 1);
-    res = malloc(n);
+    res = malloc(n_res);
     s = res;
     for(i = 0; i < pool->n_strs; ++i)
     {

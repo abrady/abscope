@@ -9,10 +9,8 @@
 #ifndef ABSERIALIZE_H
 #define ABSERIALIZE_H
 
-ABINLINE int int_binwrite(FILE *fp, int n)
-{
-    return fwrite(&n,sizeof(n),1,fp) - 1;
-}
+ABINLINE int int_binwrite(FILE *fp, int n) {return fwrite(&n,sizeof(n),1,fp) - 1;}
+ABINLINE int ptr_binwrite(FILE *fp, void *p) {return fwrite(&p,sizeof(p),1,fp) - 1;}
 
 ABINLINE int string_binwrite(FILE *fp, char *s)
 {
@@ -24,10 +22,8 @@ ABINLINE int string_binwrite(FILE *fp, char *s)
         + fwrite(s,sizeof(*s)*n,1,fp) - 1; // include NULL for fun
 }
 
-ABINLINE int int_binread(FILE *fp, int *n)
-{
-    return fread(n,sizeof(*n),1,fp) - 1;
-}
+ABINLINE int int_binread(FILE *fp, int *n)  {return fread(n,sizeof(*n),1,fp) - 1;}
+ABINLINE int ptr_binread(FILE *fp, intptr_t *n)  {return fread(n,sizeof(*n),1,fp) - 1;}
 
 ABINLINE int string_binread(FILE *fp, char **s)
 {
