@@ -156,3 +156,25 @@ int strpool_binwrite(FILE *fp, StrPool *pool)
         return 0;
     return avltree_traverse(&pool->tree,&strpool_tree_traverser_cb,fp);
 }
+
+char *strblock_from_strpool(int *res_block_len, StrPool *pool)
+{
+    int i;
+    int n_res = 0;
+    int n;
+    char *res;
+    char *s;
+    for(i = 0; i < pool->n_strs; ++i)
+        n_res += (strlen(pool->strs[i]) + 1);
+    res = malloc(n);
+    s = res;
+    for(i = 0; i < pool->n_strs; ++i)
+    {
+        n = strlen(pool->strs[i])+1;
+        memmove(s,pool->strs[i],n);
+        s += n;
+    }
+    if(res_block_len)
+        *res_block_len = n_res;
+    return res;
+}

@@ -51,21 +51,34 @@ static ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
 
 static int parse_write(FILE *fp, Parse *p)
 {
+    StrPool *sp;
     int i;
     LocInfo *lis;
     int n_lis;
     int res = 0;
     if(!p)
         return 0;
-    lis = p->locs;
     n_lis = p->n_locs;
+    lis = malloc(sizeof(*p->locs)*n_lis);
+    CopyStructs(lis,p->locs,n_lis);
+
+    
+
     res += int_binwrite(fp,n_lis);                  // num structs
     res += mem_binwrite(fp,lis,sizeof(*lis)*n_lis); // locinfos
-    res += strpool_binwrite(fp,&p->strs);
+//    res += strpool_binwrite(fp,&p->strs);
+    sp = &p->strs;
+    for(i = 0; i < sp->n_strs && 0==res; ++i)
+    {
+        char *s = sp->strs[i];
+        int n = strlen(s) + 1;
+        res += fwrite(s,sizeof(*s)*n,fp);
+    }
+
     for(i = 0; i < n_lis; ++i)
     {
-        
     }
+    
 }
 
 
@@ -162,8 +175,7 @@ int locinfo_printf(LocInfo *li,char *fmt,...)
 static char* parse_find_add_str(Parse *p, char *s)
 {
     TIMER_START();
-    char *r = _strdup(s); // strpool_find_add_str(&p->pool,s);
-    p;
+    char *r = strpool_find_add_str(&p->pool,s);
     TIMER_END(locinfo_parse_find_add_str_timer);
     return r;
 }

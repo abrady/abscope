@@ -29,6 +29,7 @@ char *strpool_find_str(StrPool *pool, char *s);
 char *strpool_find_add_str(StrPool *pool, char *s);
 char *strpool_add_str(StrPool *pool, char *s);
 void strpool_add_strblock(StrPool *pool, char *strblock, int n);
+char *strblock_from_strpool(int *res_block_len, StrPool *pool);
 
 void strpool_cleanup(StrPool *p);
 
