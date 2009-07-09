@@ -11,16 +11,20 @@
 
 #define _CRT_SECURE_NO_WARNINGS 1
 
-#ifdef _DEBUG 
 // http://msdn.microsoft.com/en-us/library/aa383745(VS.85).aspx
 #define WIN32_LEAN_AND_MEAN 
 #define _WIN32_WINNT 	0x0501
 #include <windows.h>
 #include "assert.h"
 //#include <winsock2.h>
+
+#ifdef _DEBUG 
 #include <winbase.h>  // for IsDebuggerPresent
 #define break_if_debugging() ((IsDebuggerPresent())?DebugBreak(),1:1)
 
+#else
+
+#define break_if_debugging() 0
 #endif
 
 typedef unsigned __int64 U64;
@@ -59,6 +63,12 @@ typedef int int32_t;
 #   define S_ISDIR(B) ((B)&_S_IFDIR)
 #endif
 
+#ifndef BOOL
+#   define BOOL int
+#   define FALSE 0
+#   define TRUE 1
+#endif
+
 typedef struct DirScan
 {
     char **files;
@@ -82,9 +92,15 @@ ABINLINE int strbeginswith(char *dest, char *src) {int n; if(!dest || !src) retu
 #define DEREF2(s,m,m2) ((s)?DEREF((s)->m,m2):0)
 #define MAX(a,b) (((a) > (b))?(a):(b))
 
+#ifdef DEBUG
 ABINLINE S64 timer_get()                        { S64 tmp; if(!QueryPerformanceCounter((LARGE_INTEGER*)&tmp)) return 0; return tmp;}
 ABINLINE S64 timer_diff(S64 timer_start)        { S64 cur = timer_get(); return cur - timer_start; }
 ABINLINE S64 timer_diff_reset(S64 *timer_start) { S64 diff; if(!timer_start) return 0; diff = timer_diff(*timer_start); *timer_start = timer_get(); return diff;} 
+#else
+#define timer_get() 0
+#define timer_diff(T) (T)
+#define timer_diff_reset(T) (T)
+#endif
 
 double timer_elapsed(S64 timer);
 double timer_diffelapsed(S64 timer);

@@ -22,9 +22,10 @@
 @REM /Og: global opt
 
 set INPUTS=Kernel32.lib abscope.c locinfo.c c_parse.c strs.c abutil.c abtree.c
-set FLAGS=/O2 /Oi
-REM set FLAGS=/RTCscu /ZI
-cl /analyze /J /MTd /W4 %FLAGS% %INPUTS%
+REM for real speed: /MD vs. /MT ? (single threaded vs. multi crt?)
+set FLAGS=/O2 /Oi /Zi /MT
+REM set FLAGS=/RTCscu /ZI  /MTd
+cl /analyze:stacksize 32000 /analyze /J /W4 %FLAGS% %INPUTS%
 
 
 @if NOT "%ERRORLEVEL%"=="0" goto error

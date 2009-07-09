@@ -61,7 +61,8 @@ void test_func2( Entity *pEnt, char *RewardTableName, char *ChoiceName )
     if(0==strcmp("foo","bar"))
         return;
 }
-    
+
+Foo **bar2;    
 /*
 typedef struct Bar
 {

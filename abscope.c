@@ -193,6 +193,9 @@ int main(int argc, char **argv)
                     case 'a':
                         c_query_flags = 0xffffffff;
                         break;
+                    case 'v':
+                        c_query_flags |= CQueryFlag_Vars;
+                        break;
                     default:
                         fprintf(stderr, "unknown query option %c in %s\n",*a, argv[i-1]);
                         return -1;

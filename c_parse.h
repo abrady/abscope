@@ -25,6 +25,7 @@ typedef struct CParse
 
     Parse defines;
     Parse enums;
+    Parse vars;
     
     // state info
     FILE *fp;
@@ -65,6 +66,7 @@ typedef enum CQueryFlag
     CQueryFlag_Defines    = 1<<6,
     CQueryFlag_Enums      = 1<<7,
     CQueryFlag_Srcfile    = 1<<8,
+    CQueryFlag_Vars       = 1<<9,
 } CQueryFlag;
 
 int c_findstructs(CParse *cp, char *sn);
