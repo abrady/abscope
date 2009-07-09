@@ -133,7 +133,6 @@ static int parse_read(FILE *fp, Parse *p)
 }
 
 
-
 int absfile_write_parse(char *fn, Parse *p)
 {
     int i;
