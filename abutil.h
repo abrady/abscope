@@ -16,6 +16,7 @@
 #define WIN32_LEAN_AND_MEAN 
 #define _WIN32_WINNT 	0x0501
 #include <windows.h>
+#include "assert.h"
 //#include <winsock2.h>
 #include <winbase.h>  // for IsDebuggerPresent
 #define break_if_debugging() ((IsDebuggerPresent())?DebugBreak(),1:1)
@@ -24,7 +25,7 @@
 
 typedef unsigned __int64 U64;
 typedef __int64 S64;
-typedef volatile __int64 VS64;
+typedef volatile __int64 VS64; 
 typedef volatile unsigned __int64 VU64;
 
 #define ABINLINE __forceinline

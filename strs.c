@@ -66,7 +66,7 @@ char *strpool_add_str(StrPool *pool, char *s_in)
 
 void strpool_cleanup(StrPool *p)
 {
-    avltree_cleanup(&p->tree);
+    avltree_cleanup(&p->tree,0);
     free(p->strs);
 }
 

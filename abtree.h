@@ -26,7 +26,8 @@ typedef struct AvlTree
 
 // called after an insert of node n
 void avltree_insert(AvlTree *t, void *p);
-void avltree_cleanup(AvlTree *t);
+typedef void (AvlTreeCleanupCb)(void *);
+void avltree_cleanup(AvlTree *t, AvlTreeCleanupCb *cb);
 char *avltree_find(AvlTree *t, char *p);
 AvlNode *avltree_findnode(AvlTree *t, char *p);
 

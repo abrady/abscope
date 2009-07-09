@@ -232,7 +232,7 @@ int main(int argc, char **argv)
         printf("processing %i files\n", dir_scan.n_files);
         if(print_timers)
         {
-            printf("scanning took %f seconds\n", timer_diffelapsed(timer_start));
+            printf("scanning dirs took %f seconds\n", timer_diffelapsed(timer_start));
             timer_start = timer_get();
         }
         
@@ -267,14 +267,15 @@ int main(int argc, char **argv)
 end:
     if(print_timers)
     {
-        printf("process took %f\n"
-               "data load took %f\n"
-               "query run took %f\n"
-               "allocs took %f seconds\n", 
-               timer_diffelapsed(timer_start),
-               query_timer_load,
-               query_timer_query,
-               alloc_time());
+        printf("data load took %f.2\n"
+               "query run took %f.2\n"
+               "allocs took %f.2 seconds\n"
+               "total process time: %f.2\n"
+               ,query_timer_load
+               ,query_timer_query
+               ,alloc_time()
+               ,timer_diffelapsed(timer_start)
+            );
         locinfo_print_time();
         c_parse_print_time(cp);
     }

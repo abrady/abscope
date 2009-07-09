@@ -11,19 +11,25 @@
 
 #define AVL_NODE_HEIGHT(n) (MAX(DEREF(n->left,height),DEREF(n->right,height)) + 1)
 
-static void avltree_rotfixup(AvlTree *t, AvlNode *n, AvlNode *r)
+// helper for fixing back and parent pointers in subtree
+// n : former parent that was rotated left or right
+// r : var rotated to parent of n
+// c : child of r that is now a child of n
+static ABINLINE void avltree_rotfixup(AvlTree *t, AvlNode *r, AvlNode *n, AvlNode *c)
 {
-    AvlNode *tmp;
-    if(n == t->root)
+    // fixup new root of this subtree
+    if(n == t->root) // special case for root
         t->root = r;
     else if(n->up->left == n)
         n->up->left = r;
     else if(n->up->right == n)
         n->up->right = r;
-
-    tmp = DEREF(n->up,up);
+    else
+        assert(0); // invalid up ptr 
+    r->up = n->up;
     n->up = r;
-    r->up = tmp;
+    if(c)
+        c->up = n;
 
     n->height = AVL_NODE_HEIGHT(n);
     r->height = AVL_NODE_HEIGHT(r);
@@ -33,27 +39,29 @@ static void avltree_rotfixup(AvlTree *t, AvlNode *n, AvlNode *r)
 static void avltree_rotleft(AvlTree *t, AvlNode *n)
 {
     AvlNode *r;
-    AvlNode *tmp;
+    AvlNode *c;
     r = n->right;
     if(!r) 
         return;
-    tmp = r->left;
-    r->left = n;
-    n->right = tmp;
-    avltree_rotfixup(t,n,r);
+    c        = r->left;
+    r->left  = n;
+    n->right = c;
+
+    avltree_rotfixup(t,r,n,c);
 }
 
 static void avltree_rotright(AvlTree *t, AvlNode *n)
 {
     AvlNode *r;
-    AvlNode *tmp;
+    AvlNode *c;
     r = n->left;
     if(!r)
         return;
-    tmp = r->right;
+    c        = r->right;
     r->right = n;
-    n->left = tmp;
-    avltree_rotfixup(t,n,r);
+    n->left  = c;
+
+    avltree_rotfixup(t,r,n,c);
 }
 
 // ***********************************************************************
@@ -125,7 +133,7 @@ void avltree_insert(AvlTree *t, void *p)
     while(*n)
     {
         up = *n;
-        if(t->cmp(p,(*n)->p) < 0)
+        if(t->cmp(p,(*n)->p) <= 0)
             n = &((*n)->left);
         else
             n = &((*n)->right);
@@ -136,7 +144,7 @@ void avltree_insert(AvlTree *t, void *p)
     avltree_rebalance(t,(*n));
 }
 
-void avltree_cleanup(AvlTree *t)
+void avltree_cleanup(AvlTree *t, AvlTreeCleanupCb *cb)
 {
     AvlNode *n;
     AvlNode *tmp;
@@ -153,6 +161,8 @@ void avltree_cleanup(AvlTree *t)
         {
             tmp = n;
             n = n->up;
+            if(cb)
+                cb(tmp->p);
             free(tmp);
             if(!n)
                 continue;
@@ -197,14 +207,21 @@ AvlNode *avltree_findnode(AvlTree *t, char *p)
 static int avlnode_traverse(AvlNode *n,AvlTreeTraverser fp, void *ctxt)
 {
     int res = 0;
-    if(n->left)
-        res = avlnode_traverse(n->left,fp,ctxt);
-    if(0 == res && n->right)
-        res = avlnode_traverse(n->right,fp,ctxt);
+    if(!n) 
+        return 0;
+
+    res = avlnode_traverse(n->left,fp,ctxt);
+    if(0 != res)
+       return res;
+
+    res = fp(n,ctxt);
     if(0 != res)
         return res;
-    return fp(n,ctxt);
+
+    res = avlnode_traverse(n->right,fp,ctxt);
+    return res;
 }
+
 int avltree_traverse(AvlTree *tree, AvlTreeTraverser fp, void *ctxt)
 {
     if(!tree || !tree->root || !fp)
@@ -212,9 +229,52 @@ int avltree_traverse(AvlTree *tree, AvlTreeTraverser fp, void *ctxt)
     return avlnode_traverse(tree->root,fp,ctxt);    
 }
 
-#define TEST(COND) if(!(COND)) {printf(#COND ": failed\n"); break_if_debugging(); return -1;}
+#define TEST(COND) do{ if(!(COND))  {printf("%s: failed\n",#COND); break_if_debugging(); return -1;} } while(0)
+#pragma warning(disable:4127 4706) // conditional expression is constant, assignment within conditional
+
+static int avlnode_traverse_test(AvlNode *n, void *ctxt)
+{
+    char *c = (char*)ctxt;
+    int q;
+    int r;
+    TEST(1 == sscanf(c,"%d",&q));
+    TEST(n->p && 1==sscanf(n->p,"%d",&r));
+    TEST(q == r);
+    sprintf(ctxt,"%d",q+1);
+    return 0;
+}
+
+static int test_valid_node(AvlTree *t, AvlNode *n)
+{
+    if(!n)
+        return 0;
+    if(n->left)
+    {
+        TEST(strcmp(n->left->p,n->p) <= 0);
+        TEST(n->left->up == n);
+        TEST(n->left->height > 0);
+    }
+    
+    if(n->right)
+    {
+        TEST(strcmp(n->right->p,n->p) > 0);
+        TEST(n->right->up == n);
+        TEST(n->right->height > 0);
+    }
+    TEST(n->height == AVL_NODE_HEIGHT(n));
+    
+    if(!n->up)
+        TEST(n == t->root);
+    else
+        TEST(n->up->left == n || n->up->right == n);
+    return 0;
+}
+#define TEST_NODE(N) TEST(0==test_valid_node(&t,N))
+
 int avltree_test()
 {
+    int i;
+    char c[16];
     AvlTree t = {0};
     AvlNode *n;
 
@@ -227,13 +287,20 @@ int avltree_test()
     TEST(t.root);
     n = t.root;
     TEST(0==strcmp(n->p,"3"));
+    TEST(n->height == 2);
+    TEST_NODE(n);
     TEST(0==strcmp(n->left->p,"2"));
+    TEST(n->left->height == 1);
+    TEST_NODE(n->left);
     TEST(0==strcmp(n->right->p,"5"));
+    TEST(n->right->height == 1);
+    TEST_NODE(n->right);
+
     TEST(!n->left->left   && !n->left->right);
     TEST(!n->right->left  && !n->right->right);
     TEST(n->left->up == n && n->right->up == n);
 
-    avltree_cleanup(&t);
+    avltree_cleanup(&t,0);
     TEST(!t.root);
     avltree_insert(&t,"3");
     avltree_insert(&t,"5");
@@ -245,8 +312,11 @@ int avltree_test()
     TEST(!n->left->left   && !n->left->right);
     TEST(!n->right->left  && !n->right->right);
     TEST(n->left->up == n && n->right->up == n);
+    TEST_NODE(n);
+    TEST_NODE(n->left);
+    TEST_NODE(n->right);
 
-    avltree_cleanup(&t);
+    avltree_cleanup(&t,0);
     avltree_insert(&t,"5");
     avltree_insert(&t,"3");
     avltree_insert(&t,"4");
@@ -258,7 +328,7 @@ int avltree_test()
     TEST(!n->right->left  && !n->right->right);
     TEST(n->left->up == n && n->right->up == n);
 
-    avltree_cleanup(&t);
+    avltree_cleanup(&t,0);
     avltree_insert(&t,"3");
     avltree_insert(&t,"5");
     avltree_insert(&t,"4");
@@ -270,19 +340,37 @@ int avltree_test()
     TEST(!n->right->left  && !n->right->right);
     TEST(n->left->up == n && n->right->up == n);
 
-    avltree_cleanup(&t);
-    avltree_insert(&t,"abc");
+    avltree_cleanup(&t,0);
     avltree_insert(&t,"0");
     avltree_insert(&t,"1");
     avltree_insert(&t,"2");
     avltree_insert(&t,"3");
-    TEST(avltree_find(&t,"abc"));
     TEST(avltree_find(&t,"0"));
     TEST(avltree_find(&t,"1"));
     TEST(avltree_find(&t,"2"));
     TEST(avltree_find(&t,"3"));
+    sprintf(c,"0");
+    avltree_traverse(&t,avlnode_traverse_test,c);
+    avltree_cleanup(&t,0);
 
-    avltree_cleanup(&t);
+    for(i = 0; i<100; ++i)
+    {
+        sprintf(c,"%.2d",i);
+        avltree_insert(&t,_strdup(c)); 
+        TEST((n = avltree_findnode(&t,c)));
+        TEST_NODE(n);
+    }
+
+    for(i = 0; i<100; ++i)
+    {
+        sprintf(c,"%.2d",i);
+        TEST((n = avltree_findnode(&t,c)));
+        TEST_NODE(n);
+    }
+
+    sprintf(c,"0");
+    avltree_traverse(&t,avlnode_traverse_test,c);
+    avltree_cleanup(&t,free);
     printf("done\n");
     return 0;
 }

@@ -156,7 +156,7 @@ int c_findfuncsrcfile(CParse *cp, char *sn)
         }
 
     }
-    avltree_cleanup(&t);
+    avltree_cleanup(&t,0);
     return res;
 }
 
@@ -307,7 +307,7 @@ typedef struct StackElt
 {
     union Lex
     {
-        char str[32];
+        char str[56];  // arbitrary, 32 was a little too short
         int num;
         struct Strs
         {
@@ -360,6 +360,11 @@ static void c_add_funcref(CParse *ctxt, StackElt *elt, char *funcref_ctxt)
 }
 
 static void c_add_structmember(CParse *ctxt, StackElt *elt, char *member_type, char *parent_struct)
+{
+    parse_add_locinfof(&ctxt->structrefs,ctxt->parse_file,elt->line,elt->l.str,member_type,"struct %s: %s", parent_struct,ctxt->line); 
+}
+
+static void c_add_structmemberref(CParse *ctxt, StackElt *elt, char *member_type, char *parent_struct)
 {
     parse_add_locinfof(&ctxt->structrefs,ctxt->parse_file,elt->line,elt->l.str,member_type,"struct %s: %s", parent_struct,ctxt->line); 
 }
@@ -595,6 +600,7 @@ static void parse_paren_expression(CParse *ctxt, StackElt *stack, int n_stack, c
 
 static void parse_func_body(CParse *ctxt, StackElt *stack, int n_stack, char *func_name)
 {
+    int i;
     StackElt *top = NULL;
     int var_decls_allowed = 1;
     int n_stack_in = n_stack;
@@ -623,7 +629,12 @@ static void parse_func_body(CParse *ctxt, StackElt *stack, int n_stack, char *fu
             n_stack = n_stack_in;
             break;
         case TOK:
-            // don't worry about collapsing chains of toks
+            // possible struct deref
+//             if((top[-1].tok == PTR_OP || top[-1].tok == '.') && top[-2].tok == TOK)
+//             {
+//             }
+            
+                
             break;
         case ';':
             // var decls:
@@ -717,7 +728,6 @@ static void parse_struct_body(CParse *ctxt, StackElt *stack, int n_stack, char *
             break;
         }
     }
-    
 }
 
 

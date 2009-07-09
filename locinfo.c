@@ -11,6 +11,7 @@
 
 static S64 locinfo_timer = 0;
 static S64 locinfo_read_timer = 0;
+static S64 locinfo_write_timer = 0;
 static S64 locinfo_parse_find_add_str_timer = 0;
 #define LOCINFO_TIMER_START TIMER_START
 #define LOCINFO_TIMER_END() TIMER_END(locinfo_timer)
@@ -28,11 +29,13 @@ static void locinfo_cleanup(LocInfo *l)
 static ABINLINE int locinfo_write(FILE *fp, LocInfo *l)
 {
     int res = 0;
+    TIMER_START();
     res += string_binwrite(fp,l->tag);
     res += string_binwrite(fp,l->referrer);
     res += string_binwrite(fp,l->context);
     res += string_binwrite(fp,l->file);
     res += int_binwrite(fp,l->line);
+    TIMER_END(locinfo_write_timer);
     return res;
 }
 
@@ -224,7 +227,9 @@ int locinfo_printf(LocInfo *li,char *fmt,...)
 static char* parse_find_add_str(Parse *p, char *s)
 {
     TIMER_START();
-    char *r = strpool_find_add_str(&p->strs,s);
+    // dup strings is okay, get more speed this way
+    char *r = _strdup(s); // strpool_find_add_str(&p->strs,s);
+    p;
     TIMER_END(locinfo_parse_find_add_str_timer);
     return r;
 }
@@ -278,7 +283,7 @@ int parse_print_search_tag(Parse *p,char *tag)
     for(i = 0; i < p->n_locs; ++i)
     {
         LocInfo *li = p->locs+i;
-        if(0 == strcmp(tag,li->tag))
+        if(0 == stricmp(tag,li->tag))
         {
             res++;
             locinfo_print(li);
@@ -293,9 +298,11 @@ void locinfo_print_time()
     printf("locinfo total:\t\t\t%f\n"
            "\tfind_add_str:\t\t\t%f\n"
            "\tlocinfo_read:\t\t\t%f\n"
+           "\tlocinfo_write:\t\t\t%f\n"
            ,timer_elapsed(locinfo_timer)
            ,timer_elapsed(locinfo_parse_find_add_str_timer)
            ,timer_elapsed(locinfo_read_timer)
+           ,timer_elapsed(locinfo_write_timer)
         );
 }
 
