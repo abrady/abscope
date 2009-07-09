@@ -49,35 +49,85 @@ static ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
     return res;
 }
 
-// static int parse_write(FILE *fp, Parse *p)
-// {
-//     StrPool *sp;
-//     int i;
-//     LocInfo *lis;
-//     int n_lis;
-//     int res = 0;
-//     if(!p)
-//         return 0;
-//     n_lis = p->n_locs;
-//     lis = malloc(sizeof(*p->locs)*n_lis);
-// //    CopyStructs(lis,p->locs,n_lis);
-
-//     res += int_binwrite(fp,n_lis);                  // num structs
-//     res += mem_binwrite(fp,lis,sizeof(*lis)*n_lis); // locinfos
-// //    res += strpool_binwrite(fp,&p->strs);
-//     sp = &p->strs;
-//     for(i = 0; i < sp->n_strs && 0==res; ++i)
-//     {
-//         char *s = sp->strs[i];
-//         int n = strlen(s) + 1;
-//         res += fwrite(s,sizeof(*s)*n,fp);
-//     }
-
-//     for(i = 0; i < n_lis; ++i)
-//     {
-//     }
+static int parse_write(FILE *fp, Parse *p)
+{
+    char *d;
+    char *strdata;
+    int n_strdata;
+    StrPool sp = {0};
+    int i;
+    int res = 0;
     
-// }
+    if(!p)
+        return 0;
+
+    // ----------------------------- 
+    // build contiguous strs block.
+
+    n_strdata = 0;
+    for(i = 0; i < p->strs.n_strs && 0==res; ++i)
+    {
+        char *s = p->strs.strs[i];
+        int n = strlen(s) + 1;
+        n_strdata += n;
+    }
+    strdata = malloc(n_strdata);
+    d = strdata;
+    for(i = 0; i < sp.n_strs && 0==res; ++i)
+    {
+        char *s = sp.strs[i];
+        int n = strlen(s) + 1;
+        memmove(d,s,n);
+        strpool_find_add_str(&sp,d);
+        d+= n;
+    }
+
+    res += ptr_binwrite(fp,strdata);           // 0 write strs addr
+    res += mem_binwrite(fp,strdata,d-strdata); // 1 write strs data 
+
+    res += int_binwrite(fp,p->n_locs);         // 2 write num locs
+    for(i = 0; i < p->n_locs; ++i)
+    {
+        LocInfo *li = p->locs + i;
+        LocInfo tmp = {0};
+        tmp.tag      = strpool_find_str(&sp,li->tag);
+        tmp.referrer = strpool_find_str(&sp,li->referrer);
+        tmp.context  = strpool_find_str(&sp,li->context);
+        tmp.file     = strpool_find_str(&sp,li->file);
+        tmp.line     = li->line;
+        res += fwrite(&tmp,sizeof(tmp),1,fp);   // 3 write locs
+    }
+    strpool_cleanup(&sp);
+    free(strdata);
+    return res;
+}
+
+static int parse_read(FILE *fp, Parse *p)
+{
+    int i;
+    int n;
+    intptr_t strs_start;
+    char *strdata = NULL;
+    char *strdata_end;
+    int res = 0;
+    
+    res += ptr_binread(fp,&strs_start);         // 0 read start address
+    res += mem_binread(fp,&strdata,&n);         // 1 read str length
+    strdata_end = strdata + n;
+    
+    res += mem_binread(fp,&p->locs,&p->n_locs); // 2,3 read numlocs and locs
+
+    strpool_add_strblock(&p->strs,strdata,strdata_end);
+
+    for(i = 0; i<p->n_locs; ++i)
+    {
+        LocInfo *li = p->locs + i;
+        li->tag = strdata + (int)(li->tag - strs_start);
+        li->referrer = strdata + (int)(li->referrer - strs_start);
+        li->context = strdata + (int)(li->context - strs_start);
+        li->file = strdata + (int)(li->file - strs_start);
+    }
+}
 
 
 int absfile_write_parse(char *fn, Parse *p)
@@ -173,7 +223,7 @@ int locinfo_printf(LocInfo *li,char *fmt,...)
 static char* parse_find_add_str(Parse *p, char *s)
 {
     TIMER_START();
-    char *r = strdup(s); //strpool_find_add_str(&p->pool,s);
+    char *r = strpool_find_add_str(&p->strs,s);
     TIMER_END(locinfo_parse_find_add_str_timer);
     return r;
 }

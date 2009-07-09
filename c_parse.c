@@ -1154,7 +1154,7 @@ int c_parse_test()
     TEST(0==strcmp(li->tag,"baz_b"));
     TEST(0==strcmp(li->referrer,"char"));
     TEST(0==strbeginswith(li->context,"struct Bar"));
-    TEST(li->line == 9);
+    TEST(li->line == 10);
     li++;
     TEST(0==strcmp(li->tag,"Foo"));
     TEST(0==strcmp(li->referrer,"test_func"));
