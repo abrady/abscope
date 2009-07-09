@@ -8,10 +8,16 @@
 (defun abscope-query (type tag)
   (interactive "s (s)truct (f)unc (r)ef:
 stag:")
-  (find-file abscope-dir)
-  (find-file abscope-file)
+  (if (find-buffer-visiting (concat abscope-dir"/" abscope-file))
+      (iswitchb-visit-buffer (find-buffer-visiting (concat abscope-dir"/" abscope-file)))
+    (progn
+      (find-file-other-window abscope-dir)
+      (find-file (concat abscope-dir "/" abscope-file))
+      ))
+  
   (end-of-buffer)
-  (insert "\n\n* " tag "\n")
+  (insert "\n\n* " tag ": ")
+  (set-mark-command nil)
   (start-process "abscope" (current-buffer) abscope-exe
                  (format "-Q%s" type) tag)
   )

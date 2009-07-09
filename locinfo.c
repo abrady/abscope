@@ -49,37 +49,35 @@ static ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
     return res;
 }
 
-static int parse_write(FILE *fp, Parse *p)
-{
-    StrPool *sp;
-    int i;
-    LocInfo *lis;
-    int n_lis;
-    int res = 0;
-    if(!p)
-        return 0;
-    n_lis = p->n_locs;
-    lis = malloc(sizeof(*p->locs)*n_lis);
-    CopyStructs(lis,p->locs,n_lis);
+// static int parse_write(FILE *fp, Parse *p)
+// {
+//     StrPool *sp;
+//     int i;
+//     LocInfo *lis;
+//     int n_lis;
+//     int res = 0;
+//     if(!p)
+//         return 0;
+//     n_lis = p->n_locs;
+//     lis = malloc(sizeof(*p->locs)*n_lis);
+// //    CopyStructs(lis,p->locs,n_lis);
 
+//     res += int_binwrite(fp,n_lis);                  // num structs
+//     res += mem_binwrite(fp,lis,sizeof(*lis)*n_lis); // locinfos
+// //    res += strpool_binwrite(fp,&p->strs);
+//     sp = &p->strs;
+//     for(i = 0; i < sp->n_strs && 0==res; ++i)
+//     {
+//         char *s = sp->strs[i];
+//         int n = strlen(s) + 1;
+//         res += fwrite(s,sizeof(*s)*n,fp);
+//     }
+
+//     for(i = 0; i < n_lis; ++i)
+//     {
+//     }
     
-
-    res += int_binwrite(fp,n_lis);                  // num structs
-    res += mem_binwrite(fp,lis,sizeof(*lis)*n_lis); // locinfos
-//    res += strpool_binwrite(fp,&p->strs);
-    sp = &p->strs;
-    for(i = 0; i < sp->n_strs && 0==res; ++i)
-    {
-        char *s = sp->strs[i];
-        int n = strlen(s) + 1;
-        res += fwrite(s,sizeof(*s)*n,fp);
-    }
-
-    for(i = 0; i < n_lis; ++i)
-    {
-    }
-    
-}
+// }
 
 
 int absfile_write_parse(char *fn, Parse *p)
@@ -175,7 +173,7 @@ int locinfo_printf(LocInfo *li,char *fmt,...)
 static char* parse_find_add_str(Parse *p, char *s)
 {
     TIMER_START();
-    char *r = strpool_find_add_str(&p->pool,s);
+    char *r = strdup(s); //strpool_find_add_str(&p->pool,s);
     TIMER_END(locinfo_parse_find_add_str_timer);
     return r;
 }
@@ -229,7 +227,7 @@ int parse_print_search_tag(Parse *p,char *tag)
     for(i = 0; i < p->n_locs; ++i)
     {
         LocInfo *li = p->locs+i;
-        if(0 == strcmp(tag,li->tag))
+        if(0 == stricmp(tag,li->tag))
         {
             res++;
             locinfo_print(li);
