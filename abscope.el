@@ -5,14 +5,15 @@
 (setq abscope-file "abscope-queries.org")
 (setq abscope-exe "c:/abs/abscope/abscope.exe")
 
-(defmacro make-proc-event-listener ()
-  `(lambda (proc event) 
-      (with-current-buffer (process-buffer proc)
 ;;        (insert "done.\n" event)
-        (if (> (point) ,(point))
-            (goto-char ,(point))))
-        )
-)
+(defmacro make-proc-event-listener ()
+  "called when process finishes"
+  `(lambda (proc event) 
+     (with-current-buffer (process-buffer proc)
+       (goto-char ,(point))
+       )
+     )
+  )
 
 (defun abs-print-locinfo (struct-block)
   "print out a locinfo block of the form:
@@ -35,25 +36,41 @@ Ctxt c"
        (flds)
        )
 
-    (setq flds '(val file line ref ctxt))
+    (setq flds '(file val line ref ctxt))
 ;;    (setq hval (car flds))
 ;;    (symbol-value hval)
     (setq lines (split-string struct-block "\n"))
     (loop for i in lines do
-          (if (string-match "^\\(.*?\\) \\(.*\\)" i)
+          (if (string-match "^\\(.*?\\) +\\(.*\\)" i)
               (progn
-                (setq fld (downcase (match-string 1 i)))
-                (setq val (downcase (match-string 2 i)))
+                (setq fld (match-string 1 i))
+                (setq val (match-string 2 i))
                 (loop for j in flds do
-                      (if (equal (symbol-name (car flds)) fld)
-                          (set (car flds) val)))
+                      (if (equal (symbol-name j) (downcase fld))
+                          (progn
+                            (set j val)
+                            (return)
+                            )
+                        )
+                      
+                      )
+                )
             )
           )
-    )
 
-    (insert (format "*** [[file:%s::%i][%s]] %s\n", file, line, referrer, ctxt))
+    (insert (format "** [[file:%s::%s][%s]] %s\n" file line ref ctxt))
     )
-  )   
+  )
+
+;; (abs-print-locinfo "LocInfo
+;; File foo
+;; Line n
+;; Ref r
+;; Ctxt c
+;; ")
+
+
+   
 
 (defun proc-msg-listener (proc str) 
   (with-current-buffer (process-buffer proc)
@@ -64,9 +81,9 @@ Ctxt c"
            (struct-name)
            (lines)
            )
-        (setq lines (split-string str "End" t)) ;; split into blocks of structs
+        (setq lines (split-string str "\nEnd\n" t)) ;; split into blocks of structs
         (loop for i in lines do
-              (if (string-match "^\\(.*\\)\n" i)
+              (if (string-match "\\(.*?\\)\n" i)
                   (progn
                     (setq struct-name (downcase (match-string 1 i)))
                     (cond
