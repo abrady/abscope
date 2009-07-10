@@ -203,7 +203,13 @@ void locinfo_print(LocInfo *li)
 {
     char *referrer = li->referrer ? li->referrer : li->tag;
     char *ctxt = li->context?li->context:"";
-    printf("** [[file:%s::%i][%s]] %s\n", li->file, li->line, referrer, ctxt);
+    printf("LocInfo\n"
+              "File %s\n"
+              "Line %i\n"
+              "Ref  %s\n"
+              "Ctxt %s\n"
+           "End\n",li->file, li->line, referrer, ctxt);
+//    printf("** [[file:%s::%i][%s]] %s\n", li->file, li->line, referrer, ctxt);
 }
 
 
