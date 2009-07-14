@@ -1144,7 +1144,7 @@ int c_parse_test()
     break_if_debugging();
     TEST(0==c_parse_file(&cp,"test/foo.c")); // todo: embed and write out if not existing.
 
-    TEST(cp.structrefs.n_locs == 6);
+    TEST(cp.structrefs.n_locs >= 6);
     li = cp.structrefs.locs;
     TEST(0==strcmp(li->tag,"a"));
     TEST(0==strcmp(li->referrer,"int"));
@@ -1178,7 +1178,7 @@ int c_parse_test()
     TEST(0==strcmp(li->referrer,"bar2"));
     TEST(li->line == 65);
 
-    TEST(cp.structs.n_locs == 3);
+    TEST(cp.structs.n_locs == 4);
     li = cp.structs.locs + 0;
     TEST(0==strcmp(li->tag,"Foo"));
     TEST(0==stricmp(li->file,"test/Foo.c"));
@@ -1195,7 +1195,24 @@ int c_parse_test()
     TEST(0==strcmp(li->tag,"Baz"));
     TEST(0==strcmp(li->context,"enum Baz"));
     TEST(li->line == 50);
+
+    li++;
+    TEST(0==strcmp(li->tag,"Foo2"));
+    TEST(0==strcmp(li->context,"struct Foo2"));
+    TEST(li->line == 67);
+
+    li++;
+    TEST(0==strcmp(li->tag,"iSortID"));
+    TEST(0==strcmp(li->context,"U32"));
+    li++;
+    TEST(0==strcmp(li->tag,"bSearchable"));
+    TEST(0==strcmp(li->context,"bool"));
+    li++;
+    TEST(0==strcmp(li->tag,"eType"));
+    TEST(0==strcmp(li->context,"ItemType"));
+
     
+    // func decls
     TEST(cp.funcs.n_locs == 3);
     li = cp.funcs.locs + 0;
     TEST(0==strcmp(li->tag,"test_func"));

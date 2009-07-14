@@ -63,6 +63,17 @@ void test_func2( Entity *pEnt, char *RewardTableName, char *ChoiceName )
 }
 
 Foo **bar2;    
+
+typedef struct Foo2
+{
+    REF_TO(Message) hNameMsg; AST(NAME(NameMsg))
+	U32 iSortID; AST(NO_TEXT_SAVE) // automatically calculated
+    
+	bool bSearchable; // shows up in marketplace search
+    
+	ItemType eType;
+};
+    
 /*
 typedef struct Bar
 {
