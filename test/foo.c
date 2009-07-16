@@ -21,7 +21,7 @@ void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )
             Bar c;
         }
     }while(0);
-    
+    test_foo();
 }
 
 AUTO_STARTUP(AlgoTablesCommon);

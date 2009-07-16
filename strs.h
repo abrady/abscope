@@ -35,7 +35,10 @@ void strpool_cleanup(StrPool *p);
 
 int strpool_binwrite(FILE *fp, StrPool *pool);
 
+int strpool_test(void);
 
-int test_strpool(void);
+int str_vsprintf(char **dst,char *fmt,va_list args);
+int str_sprintf(char **dst, char *fmt, ...);
+
 
 #endif //STRS_H

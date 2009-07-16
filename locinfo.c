@@ -34,7 +34,8 @@ static ABINLINE int locinfo_write(FILE *fp, LocInfo *l)
     res += string_binwrite(fp,l->referrer);
     res += string_binwrite(fp,l->context);
     res += string_binwrite(fp,l->file);
-    res += int_binwrite(fp,l->line);
+    res += int_binwrite(fp,l->lineno);
+    res += string_binwrite(fp,l->line);
     TIMER_END(locinfo_write_timer);
     return res;
 }
@@ -47,7 +48,8 @@ static ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
     res += string_binread(fp,&l->referrer);
     res += string_binread(fp,&l->context);
     res += string_binread(fp,&l->file);
-    res += int_binread(fp,&l->line);
+    res += int_binread(fp,&l->lineno);
+    res += string_binread(fp,&l->line);
     TIMER_END(locinfo_read_timer);
     return res;
 }
@@ -97,7 +99,8 @@ static int parse_write(FILE *fp, Parse *p)
         tmp.referrer = strpool_find_str(&sp,li->referrer);
         tmp.context  = strpool_find_str(&sp,li->context);
         tmp.file     = strpool_find_str(&sp,li->file);
-        tmp.line     = li->line;
+        tmp.lineno   = li->lineno;
+        tmp.line     = strpool_find_str(&sp,li->line);
         res += fwrite(&tmp,sizeof(tmp),1,fp);   // 3 write locs
     }
     strpool_cleanup(&sp);
@@ -205,57 +208,63 @@ void locinfo_print(LocInfo *li)
     char *ctxt = li->context?li->context:"";
     printf("LocInfo\n"
               "File %s\n"
-              "Line %i\n"
+              "Lineno %i\n"
+              "Line %s\n"
               "Ref  %s\n"
               "Ctxt %s\n"
-           "End\n",li->file, li->line, referrer, ctxt);
+           "End\n",li->file, li->lineno, li->line, referrer, ctxt);
 //    printf("** [[file:%s::%i][%s]] %s\n", li->file, li->line, referrer, ctxt);
 }
 
 
-int locinfo_vprintf(LocInfo *li,char *fmt,va_list args)
-{
-    locinfo_print(li);
-    return vprintf(fmt,args);
-}
+// int locinfo_vprintf(LocInfo *li,char *fmt,va_list args)
+// {
+//     locinfo_print(li);
+//     return vprintf(fmt,args);
+// }
 
-int locinfo_printf(LocInfo *li,char *fmt,...)
-{
-    int r;
-    va_list vl;
-    va_start(vl,fmt);
-    r = locinfo_vprintf(li,fmt,vl);
-    va_end(vl);
-    return r;
-}
+// int locinfo_printf(LocInfo *li,char *fmt,...)
+// {
+//     int r;
+//     va_list vl;
+//     va_start(vl,fmt);
+//     r = locinfo_vprintf(li,fmt,vl);
+//     va_end(vl);
+//     return r;
+// }
 
 static char* parse_find_add_str(Parse *p, char *s)
 {
+    char *r = NULL;
     TIMER_START();
-    // dup strings is okay, get more speed this way
-    char *r = _strdup(s); // strpool_find_add_str(&p->strs,s);
-    p;
+    if(s)
+    {
+        // dup strings is okay, get more speed this way
+        r = _strdup(s); // strpool_find_add_str(&p->strs,s);
+        p;
+        str_replacechar(r,'\n',' ');
+    }
     TIMER_END(locinfo_parse_find_add_str_timer);
     return r;
 }
 
-int parse_add_locinfo(Parse *p,char *filename, int line, char *tag, char *referrer, char *context)
+int parse_add_locinfo(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context)
 {
-    return parse_add_locinfof(p,filename,line,tag,referrer,"%s",context);
+    return parse_add_locinfof(p,filename,lineno,line,tag,referrer,"%s",context);
 }
 
 
-int parse_add_locinfof(Parse *p,char *filename, int line, char *tag, char *referrer, char *context,...)
+int parse_add_locinfof(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context, ...)
 {
     int r;
     va_list vl;
     va_start(vl,context);
-    r = parse_add_locinfov(p,filename,line,tag,referrer,context,vl);
+    r = parse_add_locinfov(p,filename,lineno,line,tag,referrer,context,vl);
     va_end(vl);
     return r;
 }
 
-int parse_add_locinfov(Parse *p,char *filename, int line, char *tag, char *referrer, char *context,va_list args)
+int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context,va_list args)
 {
     char buf[128];
     LocInfo *l;
@@ -273,7 +282,8 @@ int parse_add_locinfov(Parse *p,char *filename, int line, char *tag, char *refer
     l->referrer= parse_find_add_str(p,referrer);
     l->context = parse_find_add_str(p,buf);
     l->file    = parse_find_add_str(p,filename);
-    l->line    = line;
+    l->lineno  = lineno;
+    l->line    = parse_find_add_str(p,line);
 
     TIMER_END(locinfo_timer);
     return l - p->locs;
@@ -311,15 +321,6 @@ void locinfo_print_time()
         );
 }
 
-void parse_copy_parse(Parse *dst, Parse *src)
-{
-    int i;
-    if(!dst || !src)
-        return;
-    for(i = 0; i < src->n_locs; ++i)
-        parse_add_locinfof(dst,src->locs[i].file,src->locs[i].line,src->locs[i].tag,src->locs[i].referrer,src->locs[i].context);
-}
-
 void parse_cleanup(Parse *p)
 {
     int i;
@@ -335,22 +336,26 @@ int test_locinfo(void)
     Parse p = {0}; 
     Parse p2 = {0}; 
     printf("testing locinfo...");
-    parse_add_locinfo(&p,"filename",0xaabbccdd,"foo","bar","baz");
-    parse_add_locinfo(&p,"fn2",0xaabbccee,"alpha","beta","delta");
+    parse_add_locinfo(&p,"filename",0xaabbccdd,"line0","foo","bar","baz");
+    parse_add_locinfo(&p,"fn2",0xaabbccee,"line1","alpha","beta","delta");
     TEST(0==absfile_write_parse("test.absfile",&p));
     TEST(0==absfile_read_parse("test.absfile",&p2));
     TEST(p2.n_locs == 2);
+
     TEST(0==strcmp(p2.locs[0].tag,"foo"));
     TEST(0==strcmp(p2.locs[0].referrer,"bar"));
     TEST(0==strcmp(p2.locs[0].context,"baz"));
     TEST(0==strcmp(p2.locs[0].file,"filename"));
-    TEST(p2.locs[0].line == 0xaabbccdd);
+    TEST(p2.locs[0].lineno == 0xaabbccdd);
+    TEST(0==strcmp(p2.locs[0].line,"line0"));
 
     TEST(0==strcmp(p2.locs[1].tag,"alpha"));
     TEST(0==strcmp(p2.locs[1].referrer,"beta"));
     TEST(0==strcmp(p2.locs[1].context,"delta"));
     TEST(0==strcmp(p2.locs[1].file,"fn2"));
-    TEST(p2.locs[1].line == 0xaabbccee);
+    TEST(p2.locs[1].lineno == 0xaabbccee);
+    TEST(0==strcmp(p2.locs[1].line,"line1"));
+
     printf("done.\n");
     parse_cleanup(&p);
     parse_cleanup(&p2);

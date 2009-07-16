@@ -43,7 +43,7 @@ BOOL dirscan_accept_file(char *path, char **exclude_dirs)
     return c_ext(path);
 }
 
-static int32_t ABS_FILE_VERSION = 0x20090326;
+static int32_t ABS_FILE_VERSION = 0x20090715;
 FILE *absfile_open_write(char *fn)
 {
     FILE *fp = fopen(fn,"wb");
@@ -62,7 +62,7 @@ FILE *absfile_open_read(char *fn)
     fread(&version,sizeof(ABS_FILE_VERSION),1,fp);
     if(version != ABS_FILE_VERSION)
     {
-        fprintf(stderr,"invalid version read from %s, should be %i, got %i",fn,version,ABS_FILE_VERSION);
+        fprintf(stderr,"invalid version read from %s, should be %x, got %x\n",fn,version,ABS_FILE_VERSION);
         fclose(fp);
         return 0;
     }
@@ -78,7 +78,7 @@ static int abscope_test()
     printf("TESTING\n");
 
     TEST(0==avltree_test());
-    TEST(0==test_strpool());
+    TEST(0==strpool_test());
     TEST(0==test_locinfo());
     TEST(0==c_parse_test());
 

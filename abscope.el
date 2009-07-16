@@ -19,24 +19,23 @@
   "print out a locinfo block of the form:
 LocInfo
 File foo
-Line n
+Lineno n
 Ref r
 Ctxt c"
   (let
       (
        (lines)
-
        (fld "")
        (val "")
        (file "")
-       (line "")
+       (lineno "1")
        (ref "")
        (ctxt "")
-
+       (line "")
        (flds)
        )
 
-    (setq flds '(file val line ref ctxt))
+    (setq flds '(file val lineno ref ctxt line))
 ;;    (setq hval (car flds))
 ;;    (symbol-value hval)
     (setq lines (split-string struct-block "\n"))
@@ -58,7 +57,7 @@ Ctxt c"
             )
           )
 
-    (insert (format "** [[file:%s::%s][%s]] %s\n" file line ref ctxt))
+    (insert (format "** [[file:%s::%s][%s]] %s %s\n" file lineno ref ctxt line))
     )
   )
 
@@ -138,5 +137,17 @@ stag:")
   (insert "\n\n* ItemDef \n")
   (shell-command "c:/abs/abscope/abscope.exe -f itemCommon.h")
   (shell-command "c:/abs/abscope/abscope.exe -Qs ItemDef" (current-buffer)))
+
+(defun cdbabscope-testparse () 
+  (interactive)
+  (find-file "c:/abs/abscope")
+  (cdb "cdb -2 c:/abs/abscope/abscope.exe -T")
+  )
+
+(defun cdbabscope-testquery () 
+  (interactive)
+  (find-file "c:/src")
+  (cdb "cdb -2 c:/abs/abscope/abscope.exe -Qa reward.c")
+  )
 
 (provide 'abscope)

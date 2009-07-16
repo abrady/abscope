@@ -88,6 +88,9 @@ void scan_dir(DirScan *d, const char *adir, int recurse_dir,dirscan_fp add_file_
 #define stricmp _stricmp
 ABINLINE int strbeginswith(char *dest, char *src) {int n; if(!dest || !src) return FALSE; n = strlen(src); return strncmp(dest,src,n);}
 
+ABINLINE void str_replacechar(char *str, char from, char to) {char *t = str; for(;;) {t = strchr(t,from); if(!t) return; *t++ = to;}}
+
+
 #define DEREF(s,m) ((s)?(s)->m:0)
 #define DEREF2(s,m,m2) ((s)?DEREF((s)->m,m2):0)
 #define MAX(a,b) (((a) > (b))?(a):(b))

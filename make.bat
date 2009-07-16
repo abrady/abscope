@@ -23,8 +23,8 @@
 
 set INPUTS=Kernel32.lib abscope.c locinfo.c c_parse.c strs.c abutil.c abtree.c
 REM for real speed: /MD vs. /MT ? (single threaded vs. multi crt?)
-set FLAGS=/O2 /Oi /Zi /MT
-REM set FLAGS=/RTCscu /ZI  /MTd
+REM set FLAGS=/O2 /Oi /Zi /MT
+set FLAGS=/RTCscu /ZI  /MTd
 cl /analyze:stacksize 32000 /analyze /J /W4 %FLAGS% %INPUTS%
 
 

@@ -72,7 +72,7 @@ void strpool_cleanup(StrPool *p)
 
 #define TEST(COND) if(!(COND)) {printf("%s(%d):"#COND ": failed\n",__FILE__,__LINE__); break_if_debugging(); return -1;}
 
-int test_strpool(void)
+int strpool_test(void)
 {
     StrPool pool = {0};
     char *p;
@@ -182,4 +182,21 @@ char *strblock_from_strpool(int *res_block_len, StrPool *pool)
     if(res_block_len)
         *res_block_len = n_res;
     return res;
+}
+
+int str_vsprintf(char **dst,char *fmt,va_list args)
+{
+    int c = _vscprintf(fmt,args) + 1;
+    *dst = realloc(*dst,c);
+    return vsprintf(*dst,fmt,args);
+}
+
+int str_sprintf(char **dst, char *fmt, ...)
+{
+    int r;
+    va_list vl;
+    va_start(vl,fmt);
+    r = str_vsprintf(dst,fmt,vl);
+    va_end(vl);
+    return r;
 }
