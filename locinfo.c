@@ -210,9 +210,10 @@ void locinfo_print(LocInfo *li)
               "File %s\n"
               "Lineno %i\n"
               "Line %s\n"
+              "Tag %s\n"  
               "Ref  %s\n"
               "Ctxt %s\n"
-           "End\n",li->file, li->lineno, li->line, referrer, ctxt);
+           "End\n",li->file, li->lineno, li->line, li->tag, referrer, ctxt);
 //    printf("** [[file:%s::%i][%s]] %s\n", li->file, li->line, referrer, ctxt);
 }
 
@@ -250,7 +251,9 @@ static char* parse_find_add_str(Parse *p, char *s)
 
 int parse_add_locinfo(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context)
 {
-    return parse_add_locinfof(p,filename,lineno,line,tag,referrer,"%s",context);
+    if(context)
+        return parse_add_locinfof(p,filename,lineno,line,tag,referrer,"%s",context);
+    return parse_add_locinfof(p,filename,lineno,line,tag,referrer,NULL);
 }
 
 
@@ -264,23 +267,24 @@ int parse_add_locinfof(Parse *p,char *filename, int lineno, char *line, char *ta
     return r;
 }
 
-int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context,va_list args)
+int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context_in,va_list args)
 {
     char buf[128];
+    char *ctxt = context_in;
     LocInfo *l;
     TIMER_START();
-    *buf = 0;
-    if(context)
+    if(ctxt)
     {
-        vsnprintf(buf,DIMOF(buf),context,args);
+        vsnprintf(buf,DIMOF(buf),ctxt,args);
         buf[DIMOF(buf)-1] = 0;
+        ctxt = buf;
     }
     
     p->locs    = realloc(p->locs,sizeof(*p->locs)*(++p->n_locs));
     l          = p->locs+p->n_locs-1;
     l->tag     = parse_find_add_str(p,tag);
     l->referrer= parse_find_add_str(p,referrer);
-    l->context = parse_find_add_str(p,buf);
+    l->context = parse_find_add_str(p,ctxt);
     l->file    = parse_find_add_str(p,filename);
     l->lineno  = lineno;
     l->line    = parse_find_add_str(p,line);
@@ -329,6 +333,38 @@ void parse_cleanup(Parse *p)
     free(p->locs);
 }
 
+
+static int parse_locinfos_from_str_field(Parse *p, char *s, int off, LocInfo ***res)
+{
+    int n = 0;
+    int i;
+    if(!p || !res || !s || !INRANGE0(off,sizeof(LocInfo)))
+        return 0;
+    
+    for(i = 0; i<p->n_locs; ++i)
+    {
+        LocInfo *li = p->locs + i;
+        char *s_li = *(char**)OFFSET_PTR(li,off);
+        if(s_li && 0 == stricmp(s_li,s))
+        {
+            (*res) = realloc((*res),++n*sizeof(*res));
+            (*res)[n-1] = li;
+        }
+    }
+    return n;
+}
+
+int parse_locinfos_from_ref(Parse *p, char *ref, LocInfo ***res)
+{
+    return parse_locinfos_from_str_field(p,ref,MBR_OFFSET(LocInfo,referrer),res);
+}
+
+int parse_locinfos_from_context(Parse *p, char *ref, LocInfo ***res)
+{
+    return parse_locinfos_from_str_field(p,ref,MBR_OFFSET(LocInfo,context),res);
+}
+
+
 #define TEST(COND) if(!(COND)) {printf("%s(%d):"#COND ": failed\n",__FILE__,__LINE__); break_if_debugging(); return -1;}
 
 int test_locinfo(void)
@@ -361,3 +397,4 @@ int test_locinfo(void)
     parse_cleanup(&p2);
     return 0;
 }
+

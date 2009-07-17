@@ -29,14 +29,14 @@ Ctxt c"
        (val "")
        (file "")
        (lineno "1")
+       (tag "")
        (ref "")
        (ctxt "")
        (line "")
        (flds)
-       (tmp)
        )
 
-    (setq flds '(file val lineno ref ctxt line))
+    (setq flds '(file val lineno tag ref ctxt line))
 ;;    (setq hval (car flds))
 ;;    (symbol-value hval)
     (setq lines (split-string struct-block "\n"))
@@ -58,7 +58,8 @@ Ctxt c"
             )
           )
     
-    (insert (format "** [[file:%s::%s][%s]] %s %s\n" file lineno ref ctxt line))
+    ;; tag: not really useful as a field to display.
+    (insert (format "** [[file:%s::%s][%s]] %s: %s\n" file lineno ref ctxt line))
     )
   )
 

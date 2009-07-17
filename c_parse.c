@@ -271,6 +271,9 @@ typedef enum c_tokentype
     // not really C types
     POUND_DEFINE,
     POUND_INCLUDE,
+
+    // cryptic src macros
+    AST,
 } c_tokentype;
 #define C_KWS_START TYPEDEF
 #define IS_INTRINSIC_TYPE(T) INRANGE(T,CHAR_TOK,DOUBLE+1)
@@ -353,6 +356,12 @@ static void c_add_funcref(CParse *ctxt, StackElt *elt, char *funcref_ctxt)
 static void c_add_define(CParse *ctxt, char *define, int lineno)
 {
     parse_add_locinfo(&ctxt->defines,ctxt->parse_file,lineno,ctxt->line,define,NULL,NULL);
+}
+
+// a->b => tag = b, ref = a
+static void c_add_var(CParse *ctxt, StackElt *elt, char *ref, char *func_ctxt)
+{
+    parse_add_locinfo(&ctxt->vars,ctxt->parse_file,elt->lineno,ctxt->line,elt->l.str,ref,func_ctxt);
 }
 
 
@@ -547,7 +556,15 @@ static void parse_paren_expression(CParse *p, StackElt *stack, int n_stack, char
             n_stack = n_stack_in;
             break;
         case TOK: // keep this around
-            
+        {
+            char *ref = NULL;
+            int tok = top[-1].tok;
+            if((tok == PTR_OP || tok == '.') && top[-2].tok == TOK)
+                ref = top[-2].l.str;
+            c_add_var(p,top,ref,ctxt);
+        }
+        break;
+        case PTR_OP:
             break;
 //             // assignment
 //         case '=':
@@ -703,7 +720,7 @@ static void parse_struct_body(CParse *p, StackElt *stack, int n_stack, char *str
         switch(top->tok)
         {
         case '(':
-            if(top[-1].tok == TOK && 0==stricmp(top->l.str,"AST"))
+            if(top[-1].tok == AST)
                 parse_to_tok(p,stack,n_stack,')','('); // ignore for now
             n_stack = n_stack_in;
             break;
@@ -858,7 +875,8 @@ static const KwTokPair kws[] =
     { "break", BREAK },
     { "return", RETURN },
     { "sizeof", SIZEOF },
-};     
+    { "AST", AST},
+};
 
 static const OpTokPair ops[] = 
 {
@@ -955,6 +973,9 @@ yylex_start:
                 found_pound = POUND_INCLUDE;
         }
 
+        if(found_pound)
+            c = c_lex(p, top);
+        
         // eat preprocessor (could do in grammar, but what the hey)
         // if line ends with \, continue to eat.
         for(;;)
@@ -1128,6 +1149,9 @@ int c_parse_test()
 {
     CParse cp = {0};
     LocInfo *li;
+    LocInfo **pli;
+    LocInfo **lis = NULL;
+    int n_lis = 0;
     int i;
     int start_line = 0;
     DirScan dir_scan = {0};
@@ -1144,7 +1168,7 @@ int c_parse_test()
     // ----------------------------------------
     // parse a test file
     
-    break_if_debugging();
+
     TEST(0==c_parse_file(&cp,"test/foo.c")); // todo: embed and write out if not existing.
 
     TEST(cp.structrefs.n_locs >= 6);
@@ -1183,14 +1207,23 @@ int c_parse_test()
     TEST(0==strcmp(li->referrer,"Foo"));
 
     li++;
+    TEST(0==strcmp(li->tag,"hNameMsg"));
+    TEST(0==strcmp(li->referrer,"Message"));
+    TEST(0==strcmp(li->context,"struct Foo2"));
+
+    li++;
     TEST(0==strcmp(li->tag,"iSortID"));
-    TEST(0==strcmp(li->context,"U32"));
+    TEST(0==strcmp(li->referrer,"U32"));
+    TEST(0==strcmp(li->context,"struct Foo2"));
     li++;
     TEST(0==strcmp(li->tag,"bSearchable"));
-    TEST(0==strcmp(li->context,"bool"));
+    TEST(0==strcmp(li->referrer,"bool"));
+    TEST(0==strcmp(li->context,"struct Foo2"));
+
     li++;
     TEST(0==strcmp(li->tag,"eType"));
-    TEST(0==strcmp(li->context,"ItemType"));
+    TEST(0==strcmp(li->referrer,"ItemType"));
+    TEST(0==strcmp(li->context,"struct Foo2"));
 
     // structs
     TEST(cp.structs.n_locs == 4);
@@ -1215,7 +1248,7 @@ int c_parse_test()
 
     
     // func decls
-    TEST(cp.funcs.n_locs == 3);
+    TEST(cp.funcs.n_locs >= 3);
     li = cp.funcs.locs + 0;
     TEST(0==strcmp(li->tag,"test_func"));
     TEST(0==stricmp(li->file,"test/Foo.c"));
@@ -1236,23 +1269,32 @@ int c_parse_test()
     TEST(cp.enums.n_locs == 3);
     li = cp.enums.locs;
     TEST(0==strcmp(li[0].tag,"Bar_A"));
-    TEST(0==strcmp(li[0].referrer,"Baz"));
+    TEST(0==strcmp(li[0].context,"Baz"));
     TEST(0==strcmp(li[1].tag,"Bar_B"));    
-    TEST(0==strcmp(li[1].referrer,"Baz"));
+    TEST(0==strcmp(li[1].context,"Baz"));
     TEST(0==strcmp(li[2].tag,"Bar_C"));    
-    TEST(0==strcmp(li[2].referrer,"Baz"));
+    TEST(0==strcmp(li[2].context,"Baz"));
 
     TEST(cp.funcrefs.n_locs == 3);
     li = cp.funcrefs.locs;
     TEST(0==strcmp(li->tag,"test_foo"));
-    TEST(0==strcmp(li->context ,"test_func"));
+    TEST(0==strcmp(li->context ,"func test_func"));
     li++;
     TEST(0==strcmp(li->tag,"foo"));
-    TEST(0==strcmp(li->context ,"test_func2"));
+    TEST(0==strcmp(li->context ,"func test_func2"));
 
     li++;
     TEST(0==strcmp(li->tag,"strcmp"));
-    TEST(0==strcmp(li->referrer,"test_func2"));
+    TEST(0==strcmp(li->referrer,"func test_func2"));
+
+    n_lis = parse_locinfos_from_context(&cp.vars,"func test_func3",&lis);
+    TEST(n_lis == 5);
+    pli = lis;
+    TEST(0==strcmp((*pli++)->tag,"pDef"));
+    TEST(0==strcmp((*pli++)->tag,"eContents"));
+    TEST(0==strcmp((*pli++)->tag,"Store_All"));
+    TEST(0==strcmp((*pli++)->tag,"pDef"));
+    TEST(0==strcmp((*pli++)->tag,"bSellEnabled"));
 
     // do a final lineno test
 

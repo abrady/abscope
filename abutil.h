@@ -31,6 +31,8 @@ typedef unsigned __int64 U64;
 typedef __int64 S64;
 typedef volatile __int64 VS64; 
 typedef volatile unsigned __int64 VU64;
+typedef unsigned char U8;
+typedef signed char S8;
 
 #define ABINLINE __forceinline
 
@@ -95,6 +97,9 @@ ABINLINE void str_replacechar(char *str, char from, char to) {char *t = str; for
 #define DEREF2(s,m,m2) ((s)?DEREF((s)->m,m2):0)
 #define MAX(a,b) (((a) > (b))?(a):(b))
 
+#define SIZEOF_MBR(typ, mbr)   (sizeof(((typ*)0)->mbr))
+#define MBR_OFFSET(typ, mbr)   (intptr_t)&(((typ*)(0))->mbr)
+#define OFFSET_PTR(p,n_bytes)  ((void*)((U8*)(p) + (n_bytes)))
 #ifdef DEBUG
 ABINLINE S64 timer_get()                        { S64 tmp; if(!QueryPerformanceCounter((LARGE_INTEGER*)&tmp)) return 0; return tmp;}
 ABINLINE S64 timer_diff(S64 timer_start)        { S64 cur = timer_get(); return cur - timer_start; }
@@ -130,5 +135,6 @@ void abfree(void *p);
 #endif
 
 #define INRANGE(N,S,E) (((N)>=(S)) && ((N)<E))
+#define INRANGE0(N,E) INRANGE(N,0,E)
 
 #endif //ABUTIL_H

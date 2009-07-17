@@ -36,6 +36,8 @@
 //         }
 //     }while(0);    
 //     foo();         // tag = foo, ref = NULL, ctxt = func test_func
+//     b.a = 1;       // tag = a  , ref = b   , ctxt = func test_func
+//     a   = 0;       // tag = a  , ref = NULL, ctxt = func test_func
 // }
 
 // Foo **bar2;        // tag = bar2, ref = Foo, ctxt = "global var"
@@ -77,11 +79,14 @@ void locinfo_print(LocInfo *li);
 int parse_add_locinfo(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context);
 int parse_add_locinfof(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context, ...);
 int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context,va_list args);
-
+int parse_locinfos_from_ref(Parse *p, char *ref, LocInfo ***res);
+int parse_locinfos_from_context(Parse *p, char *ref, LocInfo ***res);
 int parse_print_search_tag(Parse *p,char *tag);
 void parse_cleanup(Parse *p);
 
 void locinfo_print_time();
+
+
 
 int test_locinfo(void);
 

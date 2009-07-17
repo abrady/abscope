@@ -74,6 +74,12 @@ typedef struct Foo2
 	ItemType eType;
 };
     
+void test_func3()
+{
+    if (pDef->eContents != Store_All && pDef->bSellEnabled)
+        return;
+}
+
 /*
 typedef struct Bar
 {
