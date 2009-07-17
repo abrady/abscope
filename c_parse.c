@@ -143,6 +143,7 @@ int c_findsrcfile(CParse *cp, char *sn)
                 tmp.tag = fname_nodir(li->file);
                 tmp.referrer = tmp.tag;
                 tmp.lineno = 1; 
+                tmp.line = tmp.file;
                 locinfo_print(&tmp);
                 avltree_insert(&t,li->file);
                 res++;
@@ -267,8 +268,9 @@ typedef enum c_tokentype
     OR_ASSIGN,
     TYPE_NAME,
 
-    // not really a C type
+    // not really C types
     POUND_DEFINE,
+    POUND_INCLUDE,
 } c_tokentype;
 #define C_KWS_START TYPEDEF
 #define IS_INTRINSIC_TYPE(T) INRANGE(T,CHAR_TOK,DOUBLE+1)
@@ -807,6 +809,9 @@ int c_parse(CParse *p)
             c_add_define(p,top->l.str, top->lineno);
             n_stack = 0;
             break;
+        case POUND_INCLUDE:
+            n_stack = 0; // need to fix c_lex to get the string for this
+            break;
         default:
             break;
         };
@@ -814,80 +819,85 @@ int c_parse(CParse *p)
     return res;
 }
 
+typedef struct KwTokPair { char *kw; int tok; } KwTokPair;
+typedef struct OpTokPair { char kw[4]; int tok;} OpTokPair;    
+static const KwTokPair kws[] = 
+{
+    { "AUTO_COMMAND",      AUTO_COMMAND },
+//        { "NOCONST",           NOCONST_DECL },
+//        { "const",             CONST_DECL },
+    { "typedef", TYPEDEF },
+    { "extern", EXTERN },
+    { "static", STATIC },
+    { "auto", AUTO },
+    { "register", REGISTER },
+    { "char", CHAR_TOK },
+    { "short", SHORT_TOK },
+    { "int", INT_TOK },
+    { "long", LONG_TOK },
+    { "signed", SIGNED },
+    { "unsigned", UNSIGNED },
+    { "float", FLOAT_TOK },
+    { "double", DOUBLE },
+//        { "const", CONST },
+//        { "volatile", VOLATILE }, ignored, see ignored_kws
+    { "void", VOID_TOK },
+    { "struct", STRUCT },
+    { "union", UNION },
+    { "enum", ENUM },
+    { "case", CASE },
+    { "default", DEFAULT },
+    { "if", IF },
+    { "else", ELSE },
+    { "switch", SWITCH },
+    { "while", WHILE },
+    { "do", DO },
+    { "for", FOR },
+    { "goto", GOTO },
+    { "continue", CONTINUE },
+    { "break", BREAK },
+    { "return", RETURN },
+    { "sizeof", SIZEOF },
+};     
+
+static const OpTokPair ops[] = 
+{
+    { "...", ELLIPSIS },
+    { "->", PTR_OP },
+    { "--", DEC_OP },
+    { "-=", SUB_ASSIGN },
+    { "++", INC_OP },
+    { "+=", ADD_ASSIGN },
+    { "<<", LEFT_OP },
+    { ">>", RIGHT_OP },
+    { "<=", LE_OP },
+    { ">=", GE_OP },
+    { "==", EQ_OP },
+    { "!=", NE_OP },
+    { "&&", AND_OP },
+    { "||", OR_OP },
+    { "*=", MUL_ASSIGN },
+    { "/=", DIV_ASSIGN },
+    { "%=", MOD_ASSIGN },
+    { "<<=", LEFT_ASSIGN },
+    { ">>=", RIGHT_ASSIGN },
+    { "&=", AND_ASSIGN },
+    { "^=", XOR_ASSIGN },
+    { "|=", OR_ASSIGN },
+};
+
+static char const *ignored_kws[] = 
+{
+    "ATH_ARG",
+    "NN_PTR_GOOD",
+    "const",
+    "volatile"
+};
+
+
 // todo: parse '==' properly
 int c_lex(CParse *p, StackElt *top)
 {
-    typedef struct KwTokPair { char *kw; int tok; } KwTokPair;
-    typedef struct OpTokPair { char kw[4]; int tok;} OpTokPair;    
-    static const KwTokPair kws[] = {
-        { "AUTO_COMMAND",      AUTO_COMMAND },
-//        { "NOCONST",           NOCONST_DECL },
-//        { "const",             CONST_DECL },
-        { "typedef", TYPEDEF },
-        { "extern", EXTERN },
-        { "static", STATIC },
-        { "auto", AUTO },
-        { "register", REGISTER },
-        { "char", CHAR_TOK },
-        { "short", SHORT_TOK },
-        { "int", INT_TOK },
-        { "long", LONG_TOK },
-        { "signed", SIGNED },
-        { "unsigned", UNSIGNED },
-        { "float", FLOAT_TOK },
-        { "double", DOUBLE },
-//        { "const", CONST },
-//        { "volatile", VOLATILE }, ignored
-        { "void", VOID_TOK },
-        { "struct", STRUCT },
-        { "union", UNION },
-        { "enum", ENUM },
-        { "case", CASE },
-        { "default", DEFAULT },
-        { "if", IF },
-        { "else", ELSE },
-        { "switch", SWITCH },
-        { "while", WHILE },
-        { "do", DO },
-        { "for", FOR },
-        { "goto", GOTO },
-        { "continue", CONTINUE },
-        { "break", BREAK },
-        { "return", RETURN },
-        { "sizeof", SIZEOF },
-    };
-     
-    // NOTE: none of these work
-    static const OpTokPair ops[] = {
-        { "...", ELLIPSIS },
-        { "->", PTR_OP },
-        { "--", DEC_OP },
-        { "-=", SUB_ASSIGN },
-        { "++", INC_OP },
-        { "+=", ADD_ASSIGN },
-        { "<<", LEFT_OP },
-        { ">>", RIGHT_OP },
-        { "<=", LE_OP },
-        { ">=", GE_OP },
-        { "==", EQ_OP },
-        { "!=", NE_OP },
-        { "&&", AND_OP },
-        { "||", OR_OP },
-        { "*=", MUL_ASSIGN },
-        { "/=", DIV_ASSIGN },
-        { "%=", MOD_ASSIGN },
-        { "<<=", LEFT_ASSIGN },
-        { ">>=", RIGHT_ASSIGN },
-        { "&=", AND_ASSIGN },
-        { "^=", XOR_ASSIGN },
-        { "|=", OR_ASSIGN },
-    };
-    static char const *ignored_kws[] = {
-        "ATH_ARG",
-        "NN_PTR_GOOD",
-        "const",
-        "volatile"
-    };
     int c;
     char tok[4096];
     char *i;
@@ -931,17 +941,18 @@ yylex_start:
     if(newline && c == '#')
     {
         int last = 0;
-        int found_pound_define = 0;
+        int found_pound = 0;
         c = c_lex(p, top);
 
         if(!c)
             LEX_RET(0);
         
-        if(c == TOK && 0 == strcmp(top->l.str,"define"))
+        if(c == TOK)
         {
-            c = c_lex(p, top);
-            if(c == TOK)
-                found_pound_define = 1;
+            if(0 == strcmp(top->l.str,"define"))
+                found_pound = POUND_DEFINE;
+            if(0 == strcmp(top->l.str,"include"))
+                found_pound = POUND_INCLUDE;
         }
 
         // eat preprocessor (could do in grammar, but what the hey)
@@ -960,8 +971,8 @@ yylex_start:
                 break;
         }
         UNGETC();
-        if(found_pound_define)
-            LEX_RET(POUND_DEFINE);
+        if(found_pound)
+            LEX_RET(found_pound);
         goto yylex_start;
     }
     else if(c == '/') // take care of comments

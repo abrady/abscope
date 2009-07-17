@@ -298,7 +298,7 @@ int parse_print_search_tag(Parse *p,char *tag)
     for(i = 0; i < p->n_locs; ++i)
     {
         LocInfo *li = p->locs+i;
-        if(0 == stricmp(tag,li->tag))
+        if(0 == stricmp(tag,li->tag) || (li->referrer && 0 == stricmp(tag,li->referrer)))
         {
             res++;
             locinfo_print(li);

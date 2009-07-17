@@ -1,14 +1,12 @@
 @for %%a in (cl.exe) do if EXIST %%~$PATH:a set vcvars_found=Y
-
 @if "%vcvars_found%"=="Y" goto after_vcvars
-
 @call "c:\Program Files\Microsoft Visual Studio 8\VC\bin\vcvars32.bat"
 @call "c:\Program Files (x86)\Microsoft Visual Studio 8\VC\bin\vcvars32.bat"
 @call "c:/Microsoft Visual Studio 8/VC/bin/vcvars32.bat"
 
 :after_vcvars
 
-@del c.tab.c c.tab.h c.output
+@REM @del c.tab.c c.tab.h c.output
 @REM bison c.y
 @if NOT "%ERRORLEVEL%"=="0" goto error
 
@@ -22,9 +20,12 @@
 @REM /Og: global opt
 
 set INPUTS=Kernel32.lib abscope.c locinfo.c c_parse.c strs.c abutil.c abtree.c
-REM for real speed: /MD vs. /MT ? (single threaded vs. multi crt?)
-REM set FLAGS=/O2 /Oi /Zi /MT
+@REM for real speed: /MD vs. /MT ? (single threaded vs. multi crt?)
+IF /I "%COMPUTERNAME%" EQU "abrady" (
+set FLAGS=/O2 /Oi /Zi /MT
+) ELSE (
 set FLAGS=/RTCscu /ZI  /MTd
+)
 cl /analyze:stacksize 32000 /analyze /J /W4 %FLAGS% %INPUTS%
 
 

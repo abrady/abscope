@@ -33,6 +33,7 @@ Ctxt c"
        (ctxt "")
        (line "")
        (flds)
+       (tmp)
        )
 
     (setq flds '(file val lineno ref ctxt line))
@@ -56,7 +57,7 @@ Ctxt c"
                 )
             )
           )
-
+    
     (insert (format "** [[file:%s::%s][%s]] %s %s\n" file lineno ref ctxt line))
     )
   )
