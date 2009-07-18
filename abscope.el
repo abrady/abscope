@@ -8,9 +8,14 @@
 ;;        (insert "done.\n" event)
 (defmacro make-proc-event-listener ()
   "called when process finishes"
-  `(lambda (proc event) 
-     (with-current-buffer (process-buffer proc)
-       (goto-char ,(point))
+  `(lambda (proc event)
+     (let
+         ((beg ,(point)))
+       (with-current-buffer (process-buffer proc)
+         (insert ": ")
+         (align-regexp beg (process-mark proc) "\t" 0 -48)
+;;         (goto-char beg)
+         )
        )
      )
   )
@@ -34,6 +39,7 @@ Ctxt c"
        (ctxt "")
        (line "")
        (flds)
+       (tmp)
        )
 
     (setq flds '(file val lineno tag ref ctxt line))
@@ -58,8 +64,22 @@ Ctxt c"
             )
           )
     
+    ;; *************************************************************************
+    ;; insertion
+
     ;; tag: not really useful as a field to display.
-    (insert (format "** [[file:%s::%s][%s]] %s: %s\n" file lineno ref ctxt line))
+;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) ref lineno ctxt line))
+
+;;  ** storeCommon.c:func store_Validate(222) pDef: 	if (pDef->eContents != Store_All && pDef->bSellEnabled
+;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) ctxt lineno ref line))
+
+;; bSellEnabled:
+;; struct ContactDialog: bool bSellEnabled; -- just the line
+;; func  store_Validate: if (pDef->eContents != Store_All && pDef->bSellEnabled -- just the line
+    (insert (format "** [[file:%s::%s][%s]]" file lineno (or (string-replace-match ".*? " ctxt "") (file-name-nondirectory file))))
+;;    (loop for i from (length ctxt) to 16 do ;; can't use indent-to as the the whole expression confuses it until org-mode hides it
+;;          (insert " "))
+    (insert (format "\t%s\n" (stripLeadingWhitespace line)))
     )
   )
 
@@ -68,15 +88,12 @@ Ctxt c"
 ;; Line n
 ;; Ref r
 ;; Ctxt c
-;; ")
-
-
-   
+;; ")   
 
 (defun proc-msg-listener (proc str) 
   (with-current-buffer (process-buffer proc)
     (save-excursion
-      (end-of-buffer)
+      (goto-char (process-mark proc))
       (let
           (
            (struct-name)
@@ -91,9 +108,9 @@ Ctxt c"
                      ((equal struct-name "locinfo") (abs-print-locinfo i))))))
         ;;      (insert str)
         )
-      )
+      (set-marker (process-mark proc) (point)))
     )
-  ) 
+  )
 
 (defun abscope-query (type tag)
   (interactive "s (s)truct (f)unc (r)ef:
@@ -106,7 +123,7 @@ stag:")
       ))
   
   (end-of-buffer)
-  (insert "\n\n* " tag ": ")
+  (insert "\n\n* " tag)
   (push-mark (point))
   (push-mark (point))
   (let
@@ -151,5 +168,63 @@ stag:")
   (find-file "c:/src")
   (cdb "cdb -2 c:/abs/abscope/abscope.exe -Qa reward.c")
   )
+
+(defun abscope-next-match ()
+  "find the next match and go to it"
+  (interactive)
+  (let
+      ((buf))
+    (find-file (concat abscope-dir "/" abscope-file))
+
+    (setq buf (save-window-excursion
+                      (org-open-at-point)
+                      (current-buffer))
+          )
+    (forward-line 1)
+    (iswitchb-visit-buffer buf)
+    )
+)
+
+(defun abscope-prev-match ()
+  "find the next match and go to it"
+  (interactive)
+  (let
+      ((buf))
+    (find-file (concat abscope-dir "/" abscope-file))
+    (forward-line -1)
+    (setq buf (save-window-excursion
+                      (org-open-at-point)
+                      (current-buffer))
+          )
+    (iswitchb-visit-buffer buf)
+    )
+)
+;;   (iswitchb-visit-buffer
+;;    (with-current-buffer (get-file-buffer (concat abscope-dir "/" abscope-file))
+;;      ;;    (find-file (concat abscope-dir "/" abscope-file))
+;;      (forward-line 1)
+;;      ;;    (re-search-forward "\\*+ ")
+;;      (save-window-excursion
+;;        (org-open-at-point)
+;;        (current-buffer)))
+;;    )
+
+(defun abscope-matches-replace ()
+  (interactive)
+  (while t 
+    (abscope-next-match)
+    (call-interactively 'query-replace-regexp)))
+
+(defun abscope-follow-tag (tag)
+  "in code try to jump to the tag matching the thing at point"
+  (interactive (list (read-string "tag:" (readWordOrRegion)))) 
+  (find-file (concat abscope-dir "/" abscope-file))
+  (end-of-buffer)
+  (if (re-search-backward (format "^\\* %s" tag) nil t)
+      (abscope-next-match)
+    (abq tag))) ;; todo: it would be nice to query a follow after process finishes
+
+
+;;(defun abscope-query-replace ()
 
 (provide 'abscope)
