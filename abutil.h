@@ -27,6 +27,10 @@
 #define break_if_debugging() 0
 #endif
 
+#define abassert(C) (break_if_debugging(),assert(C))
+
+typedef int S32;
+typedef unsigned int U32;
 typedef unsigned __int64 U64;
 typedef __int64 S64;
 typedef volatile __int64 VS64; 
@@ -136,5 +140,5 @@ void abfree(void *p);
 
 #define INRANGE(N,S,E) (((N)>=(S)) && ((N)<E))
 #define INRANGE0(N,E) INRANGE(N,0,E)
-
+#define POW_OF_2(N) (((N) & ((N)-1)) == 0)
 #endif //ABUTIL_H
