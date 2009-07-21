@@ -6,9 +6,9 @@
 
 :after_vcvars
 
-@IF /I "%i" == "OPT" set opt=Y
+@IF /I "%1" == "OPT" set opt=Y
 @IF /I "%COMPUTERNAME%" EQU "abrady" set opt=Y
-
+@IF /I "%1" == "DBG" set opt=N
 @REM @del c.tab.c c.tab.h c.output
 @REM bison c.y
 @REM @if NOT "%ERRORLEVEL%"=="0" goto error
