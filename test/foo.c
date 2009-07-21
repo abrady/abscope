@@ -13,7 +13,7 @@ typedef struct Bar
 void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )
 {
     int a;
-    Foo b;
+    Foo b = {0};
     do
     {
         if(0)
@@ -76,6 +76,8 @@ typedef struct Foo2
     
 void test_func3()
 {
+    Bar *pBar = pFoo ? GET_REF(pFoo->hFoo) : NULL;
+    U32 foo;
     if (pDef->eContents != Store_All && pDef->bSellEnabled)
         return;
 }

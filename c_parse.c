@@ -687,10 +687,6 @@ static void parse_func_body(CParse *p, StackElt *stack, int n_stack, char *func_
         case RETURN:
             var_decls_allowed = 0;
             break;
-        case ':': // labeled statement
-            if(top[-1].tok == TOK)
-                var_decls_allowed = 0;
-            break;
         }
     }
 }
@@ -1171,59 +1167,30 @@ int c_parse_test()
 
     TEST(0==c_parse_file(&cp,"test/foo.c")); // todo: embed and write out if not existing.
 
-    TEST(cp.structrefs.n_locs >= 6);
+#define TEST_LI(TAG,REF,CTXT)     TEST(0==strcmp(li->tag,TAG)); \
+    TEST(0==strcmp(li->referrer,REF));                          \
+    TEST(0==strbeginswith(li->context,CTXT));                   \
+    li++;
+
+    TEST(cp.structrefs.n_locs == 13);
     li = cp.structrefs.locs;
-    TEST(0==strcmp(li->tag,"a"));
-    TEST(0==strcmp(li->referrer,"int"));
-    TEST(0==strbeginswith(li->context,"struct Foo"));
     TEST(li->lineno == start_line + 3);
-    li++;
-    TEST(0==strcmp(li->tag,"b"));
-    TEST(0==strcmp(li->referrer,"char"));
-    TEST(0==strbeginswith(li->context,"struct Foo"));
+    TEST_LI("a",          "int",       "struct Foo");
     TEST(li->lineno == start_line + 4);
-    li++;
-    TEST(0==strcmp(li->tag,"bar_a"));
-    TEST(0==strcmp(li->referrer,"int"));
-    TEST(0==strbeginswith(li->context,"struct Bar"));
+    TEST_LI("b",          "char",      "struct Foo");
     TEST(li->lineno == start_line + 9);
-    li++;
-    TEST(0==strcmp(li->tag,"baz_b"));
-    TEST(0==strcmp(li->referrer,"char"));
-    TEST(0==strbeginswith(li->context,"struct Bar"));
+    TEST_LI("bar_a",      "int",       "struct Bar");
+    TEST_LI("baz_b",      "char",      "struct Bar");
+    TEST_LI("b",          "Foo",       "func test_func");
+    TEST_LI("c",          "Bar",       "func test_func");
+    TEST_LI("bar2",       "Foo",       "global var");
+    TEST_LI("hNameMsg",   "Message",  "struct Foo2");
+    TEST_LI("iSortID",    "U32",       "struct Foo2");
+    TEST_LI("bSearchable","bool",      "struct Foo2");
+    TEST_LI("eType",       "ItemType","struct Foo2");
+    TEST_LI("pBar",        "Bar",      "func test_func3");
+    TEST_LI("foo",         "U32",      "func test_func3");
 
-    li++;
-    TEST(0==strcmp(li->tag,"b"));
-    TEST(0==strcmp(li->referrer,"Foo"));
-    TEST(0==strcmp(li->context,"func test_func"))
-
-    li++;
-    TEST(0==strcmp(li->tag,"c"));
-    TEST(0==strcmp(li->referrer,"Bar"));
-    TEST(0==strcmp(li->context,"func test_func"))
-
-    li++;
-    TEST(0==strcmp(li->tag,"bar2"));
-    TEST(0==strcmp(li->referrer,"Foo"));
-
-    li++;
-    TEST(0==strcmp(li->tag,"hNameMsg"));
-    TEST(0==strcmp(li->referrer,"Message"));
-    TEST(0==strcmp(li->context,"struct Foo2"));
-
-    li++;
-    TEST(0==strcmp(li->tag,"iSortID"));
-    TEST(0==strcmp(li->referrer,"U32"));
-    TEST(0==strcmp(li->context,"struct Foo2"));
-    li++;
-    TEST(0==strcmp(li->tag,"bSearchable"));
-    TEST(0==strcmp(li->referrer,"bool"));
-    TEST(0==strcmp(li->context,"struct Foo2"));
-
-    li++;
-    TEST(0==strcmp(li->tag,"eType"));
-    TEST(0==strcmp(li->referrer,"ItemType"));
-    TEST(0==strcmp(li->context,"struct Foo2"));
 
     // structs
     TEST(cp.structs.n_locs == 4);
@@ -1275,7 +1242,7 @@ int c_parse_test()
     TEST(0==strcmp(li[2].tag,"Bar_C"));    
     TEST(0==strcmp(li[2].context,"Baz"));
 
-    TEST(cp.funcrefs.n_locs == 3);
+    TEST(cp.funcrefs.n_locs == 4);
     li = cp.funcrefs.locs;
     TEST(0==strcmp(li->tag,"test_foo"));
     TEST(0==strcmp(li->context ,"func test_func"));
@@ -1287,9 +1254,15 @@ int c_parse_test()
     TEST(0==strcmp(li->tag,"strcmp"));
     TEST(0==strcmp(li->referrer,"func test_func2"));
 
+    li++;
+    TEST(0==strcmp(li->tag,"GET_REF"));
+    TEST(0==strcmp(li->context ,"func test_func3"));
+
     n_lis = parse_locinfos_from_context(&cp.vars,"func test_func3",&lis);
-    TEST(n_lis == 5);
+    TEST(n_lis == 7);
     pli = lis;
+    TEST(0==strcmp((*pli++)->tag,"pFoo"));
+    TEST(0==strcmp((*pli++)->tag,"hFoo"));
     TEST(0==strcmp((*pli++)->tag,"pDef"));
     TEST(0==strcmp((*pli++)->tag,"eContents"));
     TEST(0==strcmp((*pli++)->tag,"Store_All"));
