@@ -3,8 +3,8 @@
  *     All Rights Reserved
  *
  * Module Description:
- *
- *
+ * todo:
+ * - add some measurement of performance problems (e.g. probe miss) 
  ***************************************************************************/
 #include "abhash.h"
 
