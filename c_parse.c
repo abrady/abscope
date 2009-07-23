@@ -7,6 +7,8 @@
  * - fast load
  * - build a call tree
  * - logging
+ * - add 'files', 'func decls'
+ * - 'reward_CalculateKillCredit' doesn't parse properly : lex 0.f as a float number
  ***************************************************************************/
 #include "c_parse.h"
 #include "abscope.h"
@@ -176,6 +178,8 @@ int c_query(CParse *cp, char *tag, int query_flags)
         res += c_findsrcfile(cp,tag);
     if(query_flags & CQueryFlag_Vars)
         res += parse_print_search_tag(&cp->vars,tag);
+    printf("QUERY_DONE\n\n");
+    fflush(stdout);
     return res;
 }
 
@@ -1001,6 +1005,7 @@ yylex_start:
             goto yylex_start;
         }
         UNGETC();
+        LEX_RET('/');
     }
     else if(c == '\'')     // 'a', '\'', '\\'
     {
@@ -1090,6 +1095,9 @@ yylex_start:
             }
             c = kw[0];
         }
+
+        *i++ = (char)c;
+        *i++ = 0;
         LEX_RET(c == EOF?0:c);
     }
     
@@ -1130,9 +1138,7 @@ int c_parse_test()
     LocInfo **pli;
     LocInfo **lis = NULL;
     int n_lis = 0;
-    int i;
     int start_line = 0;
-    DirScan dir_scan = {0};
     static char *structs_to_find[] = {
         "dirent",
         "Foo",
