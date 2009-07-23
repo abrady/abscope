@@ -28,7 +28,7 @@ typedef struct CParse
     Parse vars;
     
     // state info
-    FILE *fp;
+    File *fp;
     char *parse_file;
     int   parse_line;
     char  parse_error[512];

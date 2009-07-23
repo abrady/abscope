@@ -115,24 +115,28 @@ Ctxt c"
 (defun abscope-query (type tag)
   (interactive "s (s)truct (f)unc (r)ef:
 stag:")
-  (if (find-buffer-visiting (concat abscope-dir"/" abscope-file))
-      (iswitchb-visit-buffer (find-buffer-visiting (concat abscope-dir"/" abscope-file)))
-    (progn
-      (find-file-other-window abscope-dir)
-      (find-file (concat abscope-dir "/" abscope-file))
-      ))
-  
-  (end-of-buffer)
-  (insert "\n\n* " tag)
-  (push-mark (point))
-  (push-mark (point))
   (let
-      ((proc))
-    (setq proc (start-process "abscope" (current-buffer) abscope-exe (format "-Q%s" type) tag))    
-    (set-process-sentinel proc (make-proc-event-listener))
-    (set-process-filter proc  'proc-msg-listener)
+      ((bn))    
+    (setq bn (concat abscope-dir"/" abscope-file))
+     (if (find-buffer-visiting bn)
+         (iswitchb-visit-buffer (find-buffer-visiting bn))
+       (progn
+         (find-file-other-window abscope-dir)
+         (find-file (concat abscope-dir "/" abscope-file))
+         ))
+     
+     (end-of-buffer)
+     (insert "\n\n* " tag)
+     (push-mark (point))
+     (push-mark (point))
+     (let
+         ((proc))
+       (setq proc (start-process "abscope" (current-buffer) abscope-exe (format "-Q%s" type) tag))    
+       (set-process-sentinel proc (make-proc-event-listener))
+       (set-process-filter proc  'proc-msg-listener)
+       )
+     )
     )
-  )
 
 (progn
 (defun abscope-query-struct (struct)
@@ -228,3 +232,4 @@ stag:")
 ;;(defun abscope-query-replace ()
 
 (provide 'abscope)
+

@@ -219,11 +219,22 @@ BOOL hash_insert(HashTable *ht, char *key, void *p)
     return FALSE;
 }
 
-void hash_cleanup(HashTable *ht)
+void hash_cleanup(HashTable *ht, HashCleanupFp *cb)
 {
     if(!ht)
         return;
     free(ht->elts);
+    if(cb)
+    {
+        int i;
+        for(i = 0; i<ht->n_elts; ++i)
+        {
+            HashNode *n = ht->elts + i;
+            if(!n->hash)
+                continue;
+            cb(n,ht->ctxt);
+        }
+    }
 }
 
 

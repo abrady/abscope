@@ -26,7 +26,7 @@ static void locinfo_cleanup(LocInfo *l)
 }
 
 
-static ABINLINE int locinfo_write(FILE *fp, LocInfo *l)
+static ABINLINE int locinfo_write_eachfield(File *fp, LocInfo *l)
 {
     int res = 0;
     TIMER_START();
@@ -40,7 +40,7 @@ static ABINLINE int locinfo_write(FILE *fp, LocInfo *l)
     return res;
 }
 
-static ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
+static ABINLINE int locinfo_read_eachfield(File *fp, LocInfo *l)
 {
     int res = 0;
     TIMER_START();
@@ -54,7 +54,10 @@ static ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
     return res;
 }
 
-static int parse_write(FILE *fp, Parse *p)
+#define locinfo_read locinfo_read_eachfield
+#define locinfo_write locinfo_write_eachfield
+
+static int parse_write(File *fp, Parse *p)
 {
     char *d;
     char *strdata;
@@ -101,14 +104,14 @@ static int parse_write(FILE *fp, Parse *p)
         tmp.file     = strpool_find_str(&sp,li->file);
         tmp.lineno   = li->lineno;
         tmp.line     = strpool_find_str(&sp,li->line);
-        res += fwrite(&tmp,sizeof(tmp),1,fp);   // 3 write locs
+        res += abfwrite(&tmp,sizeof(tmp),1,fp);   // 3 write locs
     }
     strpool_cleanup(&sp);
     free(strdata);
     return res;
 }
 
-static int parse_read(FILE *fp, Parse *p)
+static int parse_read(File *fp, Parse *p)
 {
     int i;
     int n;
@@ -139,7 +142,7 @@ static int parse_read(FILE *fp, Parse *p)
 int absfile_write_parse(char *fn, Parse *p)
 {
     int i;
-    FILE *fp;
+    File *fp;
 
     TIMER_START();
 
@@ -151,7 +154,7 @@ int absfile_write_parse(char *fn, Parse *p)
     }
     
     // write infos
-    fwrite(&p->n_locs,sizeof(p->n_locs),1,fp);
+    abfwrite(&p->n_locs,sizeof(p->n_locs),1,fp);
     for(i = 0; i < p->n_locs; ++i)
     {
         if(0!=locinfo_write(fp,p->locs+i))
@@ -161,7 +164,7 @@ int absfile_write_parse(char *fn, Parse *p)
         }
     }
     
-    fclose(fp);
+    abfclose(fp);
     TIMER_END(locinfo_timer);
     return 0;
 }
@@ -170,7 +173,7 @@ int absfile_read_parse(char *fn, Parse *p)
 {
     int i;
     int n_alloc;
-    FILE *fp = absfile_open_read(fn);
+    File*fp = absfile_open_read(fn);
     TIMER_START();
 
     if(!fp || !p)
@@ -181,7 +184,7 @@ int absfile_read_parse(char *fn, Parse *p)
     }
 
 
-    fread(&p->n_locs,sizeof(p->n_locs),1,fp);
+    abfread(&p->n_locs,sizeof(p->n_locs),1,fp);
     n_alloc = sizeof(*p->locs)*p->n_locs;
     p->locs = realloc(p->locs,n_alloc);
     ZeroStructs(p->locs,p->n_locs);

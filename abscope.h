@@ -14,8 +14,8 @@
 #include "strs.h"
 
 
-FILE *absfile_open_write(char *fn);
-FILE *absfile_open_read(char *fn);
+File *absfile_open_write(char *fn);
+File *absfile_open_read(char *fn);
 
 
 

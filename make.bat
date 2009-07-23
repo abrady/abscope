@@ -22,12 +22,12 @@
 @REM /O2: maximize speed
 @REM /Og: global opt
 
-set INPUTS=Kernel32.lib abscope.c locinfo.c c_parse.c strs.c abutil.c abtree.c abhash.c
+set INPUTS=Kernel32.lib abscope.c locinfo.c c_parse.c strs.c abutil.c abtree.c abhash.c abfile.c
 @REM for real speed: /MD vs. /MT ? (single threaded vs. multi crt?)
 @IF /I "%opt%" EQU "Y" (
-set FLAGS=/O2 /Oi /Zi /MT
+set FLAGS=/O2 /Oi /Zi /MD
 ) ELSE (
-set FLAGS=/RTCscu /ZI  /MTd
+set FLAGS=/RTCscu /ZI  /MDd
 )
 cl /analyze:stacksize 32000 /analyze /J /W4 %FLAGS% %INPUTS%
 

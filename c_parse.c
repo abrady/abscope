@@ -9,6 +9,7 @@
  * - logging
  ***************************************************************************/
 #include "c_parse.h"
+#include "abhash.h"
 #include "abscope.h"
 #include "locinfo.h"
 
@@ -19,7 +20,7 @@ int c_parse_file(CParse *cp, char *fn)
     int parse_res = 0;
     cp->parse_file = fn;
     cp->parse_line = 1;
-    cp->fp = fopen(cp->parse_file,"rb");
+    cp->fp = abfopen(cp->parse_file,File_R);
     
     if(!cp->fp)
     {
@@ -30,7 +31,7 @@ int c_parse_file(CParse *cp, char *fn)
     {
         printf("failed to parse file %s, error(%i):%s\n",cp->parse_file,parse_res,cp->parse_error);
     }
-    fclose(cp->fp);
+    abfclose(cp->fp);
     return parse_res;
 }
 
@@ -117,9 +118,9 @@ int c_findenums(CParse *cp, char *sn)
 
 int c_findsrcfile(CParse *cp, char *sn)
 {
-    int res = 0;
+    int res = 0; 
     int i;
-    AvlTree t = {0};
+    HashTable t = {0};
     Parse *ps[128];
     int n = 0;
     ps[n++] = &cp->structs;
@@ -136,7 +137,7 @@ int c_findsrcfile(CParse *cp, char *sn)
         {
             LocInfo *li = ps[i]->locs + j;
             char *fn = fname_nodir(li->file);
-            if(0 == stricmp(fn,sn) && !avltree_find(&t,li->file))
+            if(0 == stricmp(fn,sn) && !hash_exists(&t,li->file))
             {
                 LocInfo tmp = {0};
                 tmp.file = li->file;
@@ -145,13 +146,13 @@ int c_findsrcfile(CParse *cp, char *sn)
                 tmp.lineno = 1; 
                 tmp.line = tmp.file;
                 locinfo_print(&tmp);
-                avltree_insert(&t,li->file);
+                hash_insert(&t,li->file,NULL);
                 res++;
             }
         }
     }
     
-    avltree_cleanup(&t,0);
+    hash_cleanup(&t,0);
     return res;
 }
 
@@ -922,8 +923,8 @@ int c_lex(CParse *p, StackElt *top)
 // timing each getch call has too much overhead
 // #define GETC() ((timer_getc = timer_get()),(p->line[(p->i_line++)%DIMOF(p->line)] = (char)(c = getc(p->fp))),(p->getc_timing += timer_diff(timer_getc)),c)
 
-#define GETC() ((p->line[(p->i_line++)%DIMOF(p->line)] = (char)(c = getc(p->fp))),c)
-#define UNGETC() (p->i_line--,ungetc(c, p->fp)) 
+#define GETC() ((p->line[(p->i_line++)%DIMOF(p->line)] = (char)(c = abgetc(p->fp))),c)
+#define UNGETC() (p->i_line--,abungetc(c, p->fp)) 
 #define LEX_RET(VAL) { p->lex_timing += timer_diff(timer_start); \
         p->line[(p->i_line)%DIMOF(p->line)] = 0;           \
         return VAL;                                                 \

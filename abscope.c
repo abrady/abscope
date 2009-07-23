@@ -45,26 +45,31 @@ BOOL dirscan_accept_file(char *path, char **exclude_dirs)
 }
 
 static int32_t ABS_FILE_VERSION = 0x20090715;
-FILE *absfile_open_write(char *fn)
+File *absfile_open_write(char *fn)
 {
-    FILE *fp = fopen(fn,"wb");
+    File *fp = abfopen(fn,File_W);
     if(!fp)
         return 0;
-    fwrite(&ABS_FILE_VERSION,sizeof(ABS_FILE_VERSION),1,fp);
+    if(1 != abfwrite(&ABS_FILE_VERSION,sizeof(ABS_FILE_VERSION),1,fp))
+    {
+        abfclose(fp);
+        return 0;
+    }
+    
     return fp;
 }
 
-FILE *absfile_open_read(char *fn)
+File *absfile_open_read(char *fn)
 {
     int32_t version = 0;
-    FILE *fp = fopen(fn,"rb");
+    File *fp = abfopen(fn,File_R);
     if(!fp)
         return 0;
-    fread(&version,sizeof(ABS_FILE_VERSION),1,fp);
+    abfread(&version,sizeof(ABS_FILE_VERSION),1,fp);
     if(version != ABS_FILE_VERSION)
     {
         fprintf(stderr,"invalid version read from %s, should be %x, got %x\n",fn,version,ABS_FILE_VERSION);
-        fclose(fp);
+        abfclose(fp);
         return 0;
     }
     
