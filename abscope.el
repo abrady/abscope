@@ -4,6 +4,20 @@
 (setq abscope-dir "c:/src")
 (setq abscope-file "abscope-queries.org")
 (setq abscope-exe "c:/abs/abscope/abscope.exe")
+(setq abscope-proc nil)
+(setq abscope-tq nil)
+
+(defun abscope-re-launch ()
+  "launch/re-launch the exe"
+  (if (not (and abscope-proc (equal (process-status abscope-proc) 'run)))
+      (save-window-excursion
+        (find-file (concat abscope-dir "/" abscope-file))
+        (setq abscope-proc (start-process "abscope" (current-buffer) abscope-exe "-Qa" "-"))
+        (setq abscope-tq (tq-create abscope-proc))
+        )
+    )
+)
+
 
 ;;        (insert "done.\n" event)
 (defmacro make-proc-event-listener ()
@@ -93,7 +107,8 @@ Ctxt c"
 (defun proc-msg-listener (proc str) 
   (with-current-buffer (process-buffer proc)
     (save-excursion
-      (goto-char (process-mark proc))
+      ;; (goto-char (process-mark proc)) todo: proper mark saving.
+      (insert ":") ;; subtle notice of when the process finishes
       (let
           (
            (struct-name)
@@ -115,28 +130,22 @@ Ctxt c"
 (defun abscope-query (type tag)
   (interactive "s (s)truct (f)unc (r)ef:
 stag:")
-  (let
-      ((bn))    
-    (setq bn (concat abscope-dir"/" abscope-file))
-     (if (find-buffer-visiting bn)
-         (iswitchb-visit-buffer (find-buffer-visiting bn))
-       (progn
-         (find-file-other-window abscope-dir)
-         (find-file (concat abscope-dir "/" abscope-file))
-         ))
-     
-     (end-of-buffer)
-     (insert "\n\n* " tag)
-     (push-mark (point))
-     (push-mark (point))
-     (let
-         ((proc))
-       (setq proc (start-process "abscope" (current-buffer) abscope-exe (format "-Q%s" type) tag))    
-       (set-process-sentinel proc (make-proc-event-listener))
-       (set-process-filter proc  'proc-msg-listener)
-       )
-     )
-    )
+  (if (find-buffer-visiting (concat abscope-dir"/" abscope-file))
+      (iswitchb-visit-buffer (find-buffer-visiting (concat abscope-dir"/" abscope-file)))
+    (progn
+      (find-file-other-window abscope-dir)
+      (find-file (concat abscope-dir "/" abscope-file))
+      ))
+  
+  (end-of-buffer)
+  (insert "\n\n* " tag)
+  (push-mark (point))
+  (push-mark (point))
+  (abscope-re-launch)
+    ;;(set-process-sentinel proc (make-proc-event-listener))
+    ;;(set-process-filter proc  'proc-msg-listener)
+  (tq-enqueue abscope-tq (concat tag "\n") "^QUERY_DONE\n\n" abscope-proc 'proc-msg-listener)
+  )
 
 (progn
 (defun abscope-query-struct (struct)

@@ -7,6 +7,8 @@
  * - fast load
  * - build a call tree
  * - logging
+ * - add 'files', 'func decls'
+ * - 'reward_CalculateKillCredit' doesn't parse properly : lex 0.f as a float number
  ***************************************************************************/
 #include "c_parse.h"
 #include "abhash.h"
@@ -177,6 +179,8 @@ int c_query(CParse *cp, char *tag, int query_flags)
         res += c_findsrcfile(cp,tag);
     if(query_flags & CQueryFlag_Vars)
         res += parse_print_search_tag(&cp->vars,tag);
+    printf("QUERY_DONE\n\n");
+    fflush(stdout);
     return res;
 }
 
@@ -202,14 +206,17 @@ int c_ext(char *file)
 typedef enum c_tokentype 
 {
     PARSE_ERROR = 256,
-    AUTO_COMMAND,
     CHAR_LITERAL,
     TOK,
     STR,
-    VAR_DECL,
-    VAR_DECL_LIST,
-    ARGLIST,
     FUNC_HEADER,
+
+    // expressions
+//     EXPR,                // assign expr*
+//     EXPR_CONDITIONAL,         // (a && b || a && c) ? a : b
+//     EXPR_ASSIGN         // unary expr = conditionaal expr
+//     EXPR_PRIMARY,        // TOK, constant, string ( expr )
+//     PAREN_EXPR,  // e.g. (a,1) or (a || b)
     
     // c keywords, don't reorder!!! see INTRINSIC_TYPE macro
     TYPEDEF,
@@ -275,34 +282,10 @@ typedef enum c_tokentype
 
     // cryptic src macros
     AST,
+    AUTO_COMMAND,
 } c_tokentype;
 #define C_KWS_START TYPEDEF
 #define IS_INTRINSIC_TYPE(T) INRANGE(T,CHAR_TOK,DOUBLE+1)
-
-typedef enum c_vartypee {
-    VT_NONE,
-    VT_STR,
-    VT_NUM,
-    VT_REF,
-    VT_REFLIST,
-};
-
-
-int c_tokentype_vars[] = 
-{
-    VT_NONE, //ERROR,
-    VT_NONE, //TYPEDEF,
-    VT_NONE, //EXTERN,
-    VT_NONE, //STATIC,
-    VT_NONE, //STRUCT,
-    VT_NONE, //AUTO_COMMAND,
-    VT_NONE, //CHAR_LITERAL,
-    VT_STR, //TOK,
-    VT_STR, //STR,
-    VT_REF, //VAR_DECL,
-    VT_REFLIST, // VAR_DECL_LIST
-    VT_REFLIST, // ARGLIST
-};
 
 
 typedef struct StackElt
@@ -627,9 +610,12 @@ static void parse_func_body(CParse *p, StackElt *stack, int n_stack, char *func_
             break;
         case '(':
             parse_paren_expression(p,stack,n_stack,func_ctxt);
-            if(top[-1].tok == TOK)
+            if(top[-1].tok == TOK) {
                 c_add_funcref(p,top-1,func_ctxt);
-            n_stack = n_stack_in;
+                n_stack-=2;
+            }
+            else
+                n_stack--;
             break;
         case TOK:
             // possible struct deref
@@ -664,7 +650,7 @@ static void parse_func_body(CParse *p, StackElt *stack, int n_stack, char *func_
                     }
                     else if(!type && (t->tok == TOK))
                         type = t;
-                    else if(type && (t[1].tok == ',' || t+1 == top))
+                    else if(type && t->tok == TOK)
                         c_add_structref(p,t,type->l.str,func_ctxt);
                 }
                 // if no type, good chance that this is an expression
@@ -1020,6 +1006,7 @@ yylex_start:
             goto yylex_start;
         }
         UNGETC();
+        LEX_RET('/');
     }
     else if(c == '\'')     // 'a', '\'', '\\'
     {
@@ -1109,6 +1096,9 @@ yylex_start:
             }
             c = kw[0];
         }
+
+        *i++ = (char)c;
+        *i++ = 0;
         LEX_RET(c == EOF?0:c);
     }
     
@@ -1149,9 +1139,7 @@ int c_parse_test()
     LocInfo **pli;
     LocInfo **lis = NULL;
     int n_lis = 0;
-    int i;
     int start_line = 0;
-    DirScan dir_scan = {0};
     static char *structs_to_find[] = {
         "dirent",
         "Foo",
@@ -1270,28 +1258,7 @@ int c_parse_test()
     TEST(0==strcmp((*pli++)->tag,"pDef"));
     TEST(0==strcmp((*pli++)->tag,"bSellEnabled"));
 
-    // do a final lineno test
+    // TODO: do a final lineno test
 
-    // ----------------------------------------
-    // scan a bunch of files
-
-    printf("scanning ./test...");
-    scan_dir(&dir_scan,"./test",1,dirscan_accept_c_files,NULL);
-    printf("done.\n");
-
-    printf("found %i files:\n",dir_scan.n_files);
-    TEST(dir_scan.n_files >= 3);
-    for(i = 0; i < dir_scan.n_files;++i)
-    {
-        int r;
-        printf("scanning %s",dir_scan.files[i]);
-        r = c_parse_file(&cp,dir_scan.files[i]);
-        TEST(r>=0);
-    }
-
-    for(i = 0; i < DIMOF(structs_to_find); ++i)
-        TEST(0<c_findstructs(&cp,structs_to_find[i]));
-    for(i = 0; i < DIMOF(structs_not_to_find); ++i)
-        TEST(0==c_findstructs(&cp,structs_not_to_find[i]));
     return 0;
 }

@@ -96,6 +96,7 @@ static CParse g_cp;
 
 int main(int argc, char **argv)
 {
+    BOOL loop_query = 0;
     S64 query_timer;
     double query_timer_load = 0;
     double query_timer_query = 0;
@@ -257,24 +258,33 @@ int main(int argc, char **argv)
         }
         
         res += c_on_processing_finished(cp);
-        goto end;
     }
     
-
     if(query_str)
     {
-        query_timer = timer_get();
+        char buf[1024];
+        if(0==strcmp(query_str,"-"))
+        {
+            loop_query = TRUE;
+            query_str = buf;
+        }
+
         if(c_load(cp)<0)
             return -1;
-        query_timer_load = timer_diffelapsed(query_timer);
-
-        query_timer = timer_get();
-        res = c_query(cp,query_str,c_query_flags);
-        query_timer_query = timer_diffelapsed(query_timer);
-        goto end;
+        
+        do
+        {
+            if(loop_query)
+                while(0==scanf("%s",query_str));
+            query_timer = timer_get();
+            query_timer_load = timer_diffelapsed(query_timer);
+            
+            query_timer = timer_get();
+            res = c_query(cp,query_str,c_query_flags);
+            query_timer_query = timer_diffelapsed(query_timer);
+        } while(loop_query);
     }
-    
-end:
+
     if(print_timers)
     {
         printf("data load took %f.2\n"
