@@ -510,11 +510,17 @@ static void parse_enum_body(CParse *p, StackElt *stack, int n_stack, char *enum_
     }
 }
 
+// 
+//static void extract_vars(CParse *p, StackElt *s, StackElt *e)
+
 // expressions:
 // assignment expression
 // conditional expression
 // expression, expression
-static void parse_paren_expression(CParse *p, StackElt *stack, int n_stack, char *ctxt)
+// transition to this from:
+// - expression_stmt: expression;
+// -  
+static void parse_expr(CParse *p, StackElt *stack, int n_stack, char *ctxt, char terminating_tok) 
 {
     StackElt *top = NULL;
     int n_stack_in = n_stack;
@@ -528,14 +534,14 @@ static void parse_paren_expression(CParse *p, StackElt *stack, int n_stack, char
         }
         
         NEXT_TOK();        
-        if(top->tok == ')')
+        if(top->tok == terminating_tok)
             return;
         switch(top->tok)
         {
         case '(':
             if(top[-1].tok == TOK)
                 c_add_funcref(p,top-1,ctxt);
-            parse_paren_expression(p,stack,n_stack,ctxt);
+            parse_expr(p,stack,n_stack,ctxt,')');
             n_stack = n_stack_in;
             break;
         case TOK: // keep this around
@@ -579,6 +585,44 @@ static void parse_paren_expression(CParse *p, StackElt *stack, int n_stack, char
     }
 }
 
+static void parse_var_decls(CParse *p, StackElt *stack, int n_stack, char *func_ctxt)
+{
+    StackElt *top = NULL;
+    StackElt *type = NULL;
+    StackElt *var = NULL;
+    int n_stack_in = n_stack;
+    for(;;)
+    {
+        if(n_stack == MAX_STACK)
+        {
+            parser_error(p,top,"out of room on stack in %s. aborting.",__FUNCTION__);
+            break;
+        }
+        
+        NEXT_TOK();        
+        if(top->tok == ';')
+            return;    
+        switch(top->tok)
+        {
+        case TOK:
+            if(!type)
+            {
+                type = top;
+                n_stack_in = n_stack; // don't reduce past the type decl
+            }
+            else
+            {
+                c_add_structref(p,top,type->l.str,func_ctxt);
+                n_stack = n_stack_in;
+            }
+            break;
+        case '=':
+            parse_expr(p,stack,n_stack,func_ctxt);
+            n_stack = n_stack_in;
+        }
+    }
+}
+
 static void parse_func_body(CParse *p, StackElt *stack, int n_stack, char *func_ctxt)
 {
     StackElt *top = NULL;
@@ -608,7 +652,7 @@ static void parse_func_body(CParse *p, StackElt *stack, int n_stack, char *func_
             }
             break;
         case '(':
-            parse_paren_expression(p,stack,n_stack,func_ctxt);
+            parse_expr(p,stack,n_stack,func_ctxt,')');
             if(top[-1].tok == TOK) {
                 c_add_funcref(p,top-1,func_ctxt);
                 n_stack-=2;
@@ -617,12 +661,6 @@ static void parse_func_body(CParse *p, StackElt *stack, int n_stack, char *func_
                 n_stack--;
             break;
         case TOK:
-            // possible struct deref
-//             if((top[-1].tok == PTR_OP || top[-1].tok == '.') && top[-2].tok == TOK)
-//             {
-//             }
-            
-                
             break;
         case ';':
             // var decls:
@@ -639,7 +677,10 @@ static void parse_func_body(CParse *p, StackElt *stack, int n_stack, char *func_
                 {
                     if(t->tok == '=')
                     {
-                        do{t++;}while(t < top && t->tok != ',');
+                        do
+                        {
+                            t++;
+                        } while(t < top && t->tok != ',');
                         continue;
                     }
                     else if(!type && IS_INTRINSIC_TYPE(t->tok))
@@ -1177,6 +1218,7 @@ int c_parse_test()
     TEST_LI("bSearchable","bool",      "struct Foo2");
     TEST_LI("eType",       "ItemType","struct Foo2");
     TEST_LI("pBar",        "Bar",      "func test_func3");
+    TEST_LI("pBaz",        "Bar",      "func test_func3");
     TEST_LI("foo",         "U32",      "func test_func3");
 
 
@@ -1249,6 +1291,7 @@ int c_parse_test()
     n_lis = parse_locinfos_from_context(&cp.vars,"func test_func3",&lis);
     TEST(n_lis == 7);
     pli = lis;
+    TEST(0==strcmp(pli[0]->context,"func test_func3"));
     TEST(0==strcmp((*pli++)->tag,"pFoo"));
     TEST(0==strcmp((*pli++)->tag,"hFoo"));
     TEST(0==strcmp((*pli++)->tag,"pDef"));
@@ -1256,6 +1299,7 @@ int c_parse_test()
     TEST(0==strcmp((*pli++)->tag,"Store_All"));
     TEST(0==strcmp((*pli++)->tag,"pDef"));
     TEST(0==strcmp((*pli++)->tag,"bSellEnabled"));
+    TEST(0==strcmp((*pli++)->tag,"eBar"));
 
     // TODO: do a final lineno test
 
