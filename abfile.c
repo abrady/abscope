@@ -28,11 +28,11 @@ File *MemFile_load(char const *fn)
     f->fp.mem.p = malloc(n);
     if(1 != fread(f->fp.mem.p,n,1,fp))
     {
-        fclose(fp);
         free(f->fp.mem.p);
         free(f);
-        return NULL;
+        f = NULL;
     }
+    fclose(fp);
     return f;
 }
 
@@ -55,6 +55,11 @@ File *abfopen(char const *fn,FileFlags mode)
     fp = calloc(sizeof(*fp),1);
     fp->mode = FileMode_CRT;
     fp->fp.crt = fopen(fn,mode_str);
+    if(!fp->fp.crt)
+    {
+        free(fp);
+        fp = NULL;
+    }
     return fp;
 }
 

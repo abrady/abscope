@@ -205,19 +205,29 @@ int absfile_read_parse(char *fn, Parse *p)
     return 0;
 }
 
-void locinfo_print(LocInfo *li)
+void locinfo_print(LocInfo *li, char *in)
 {
     char *referrer = li->referrer ? li->referrer : li->tag;
     char *ctxt = li->context?li->context:"";
-    printf("LocInfo\n"
-              "File %s\n"
-              "Lineno %i\n"
-              "Line %s\n"
-              "Tag %s\n"  
-              "Ref  %s\n"
-              "Ctxt %s\n"
-           "End\n",li->file, li->lineno, li->line, li->tag, referrer, ctxt);
-//    printf("** [[file:%s::%i][%s]] %s\n", li->file, li->line, referrer, ctxt);
+    if(!in)
+        in = "";
+    
+    printf("%sLocInfo\n"
+              "%s\tFile %s\n"
+              "%s\tLineno %i\n"
+              "%s\tLine %s\n"
+              "%s\tTag %s\n"  
+              "%s\tRefName  %s\n"
+              "%s\tCtxt %s\n"
+           ,in, in,li->file, in,li->lineno, in,li->line, in,li->tag, in,referrer, in,ctxt);
+    if(li->ref && 0)
+    {
+        char tmp[128];
+        printf("%s\tRef ",in);
+        sprintf_s(SSTR(tmp),"%s\t",in);
+        locinfo_print(li->ref,tmp);
+    }
+    printf("%sEnd\n",in);
 }
 
 
@@ -285,6 +295,7 @@ int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *ta
     
     p->locs    = realloc(p->locs,sizeof(*p->locs)*(++p->n_locs));
     l          = p->locs+p->n_locs-1;
+    ZeroStruct(l);
     l->tag     = parse_find_add_str(p,tag);
     l->referrer= parse_find_add_str(p,referrer);
     l->context = parse_find_add_str(p,ctxt);
@@ -308,7 +319,7 @@ int parse_print_search_tag(Parse *p,char *tag)
         if(0 == stricmp(tag,li->tag) || (li->referrer && 0 == stricmp(tag,li->referrer)))
         {
             res++;
-            locinfo_print(li);
+            locinfo_print(li,NULL);
         }
     }
     TIMER_END(locinfo_timer);

@@ -76,10 +76,16 @@ typedef struct Foo2
     
 void test_func3()
 {
-    Bar *pBar = pFoo ? GET_REF(pFoo->hFoo) : NULL;
+    Bar *pBar = pFoo ? GET_REF(pFoo->hFoo) : NULL, *pBaz;
     U32 foo;
     if (pDef->eContents != Store_All && pDef->bSellEnabled)
         return;
+    foo = eBar;
+}
+
+AUTO_EXPR_FUNC(UIGen) ACMD_NAME("Acmd");
+void exprAcmd()
+{
 }
 
 /*

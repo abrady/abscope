@@ -1,6 +1,5 @@
-;; ;;
-;; process-buffer : the buffer for a process
-;; process-mark   : 
+
+
 (setq abscope-dir "c:/src")
 (setq abscope-file "abscope-queries.org")
 (setq abscope-exe "c:/abs/abscope/abscope.exe")
@@ -18,22 +17,6 @@
     )
 )
 
-
-;;        (insert "done.\n" event)
-(defmacro make-proc-event-listener ()
-  "called when process finishes"
-  `(lambda (proc event)
-     (let
-         ((beg ,(point)))
-       (with-current-buffer (process-buffer proc)
-         (insert ": ")
-         (align-regexp beg (process-mark proc) "\t" 0 -48)
-;;         (goto-char beg)
-         )
-       )
-     )
-  )
-
 (defun abs-print-locinfo (struct-block)
   "print out a locinfo block of the form:
 LocInfo
@@ -49,14 +32,14 @@ Ctxt c"
        (file "")
        (lineno "1")
        (tag "")
-       (ref "")
+       (refname "")
        (ctxt "")
        (line "")
        (flds)
        (tmp)
        )
 
-    (setq flds '(file val lineno tag ref ctxt line))
+    (setq flds '(file val lineno tag refname ctxt line))
 ;;    (setq hval (car flds))
 ;;    (symbol-value hval)
     (setq lines (split-string struct-block "\n"))
@@ -82,10 +65,10 @@ Ctxt c"
     ;; insertion
 
     ;; tag: not really useful as a field to display.
-;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) ref lineno ctxt line))
+;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) refname lineno ctxt line))
 
 ;;  ** storeCommon.c:func store_Validate(222) pDef: 	if (pDef->eContents != Store_All && pDef->bSellEnabled
-;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) ctxt lineno ref line))
+;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) ctxt lineno refname line))
 
 ;; bSellEnabled:
 ;; struct ContactDialog: bool bSellEnabled; -- just the line
@@ -100,15 +83,15 @@ Ctxt c"
 ;; (abs-print-locinfo "LocInfo
 ;; File foo
 ;; Line n
-;; Ref r
+;; Refname r
 ;; Ctxt c
 ;; ")   
 
 (defun proc-msg-listener (proc str) 
   (with-current-buffer (process-buffer proc)
-    (save-excursion
+    (insert ":") ;; subtle notice of when the process finishes
+      (save-excursion
       ;; (goto-char (process-mark proc)) todo: proper mark saving.
-      (insert ":") ;; subtle notice of when the process finishes
       (let
           (
            (struct-name)
@@ -123,7 +106,11 @@ Ctxt c"
                      ((equal struct-name "locinfo") (abs-print-locinfo i))))))
         ;;      (insert str)
         )
-      (set-marker (process-mark proc) (point)))
+
+      ;; skip to link for first match to get rid of just a few button presses 
+      (set-marker (process-mark proc) (point))
+      )
+    (re-search-forward "\\[\\[" (line-end-position) t)
     )
   )
 
@@ -144,31 +131,18 @@ stag:")
   (abscope-re-launch)
     ;;(set-process-sentinel proc (make-proc-event-listener))
     ;;(set-process-filter proc  'proc-msg-listener)
-  (tq-enqueue abscope-tq (concat tag "\n") "^QUERY_DONE\n\n" abscope-proc 'proc-msg-listener)
+  (tq-enqueue abscope-tq (concat type " " tag "\n") "^QUERY_DONE\n\n" abscope-proc 'proc-msg-listener)
+  ;; *seems* to be more responsive if you do this
+  (accept-process-output abscope-proc 0.1 0 1) 
+  (tq-process-buffer abscope-tq)
   )
 
-(progn
-(defun abscope-query-struct (struct)
-  (interactive "s struct:")
-  (abscope-query "s" struct))
-;;(abscope-query-struct "ItemDef")
-)
-
 (defun abq (tag)
+  "query for a tag from all types"
   (interactive (list (read-string "The string to search for:"
  								  (readWordOrRegion))))
-  (abscope-query "a" tag))
- 
-
-
-(defun abt ()
-  (interactive)
-  (find-file "c:/abs/abscope/test")
-  (find-file abscope-file)
-  (end-of-buffer)
-  (insert "\n\n* ItemDef \n")
-  (shell-command "c:/abs/abscope/abscope.exe -f itemCommon.h")
-  (shell-command "c:/abs/abscope/abscope.exe -Qs ItemDef" (current-buffer)))
+  (abscope-query "a" tag)
+  )
 
 (defun cdbabscope-testparse () 
   (interactive)
@@ -212,15 +186,6 @@ stag:")
     (iswitchb-visit-buffer buf)
     )
 )
-;;   (iswitchb-visit-buffer
-;;    (with-current-buffer (get-file-buffer (concat abscope-dir "/" abscope-file))
-;;      ;;    (find-file (concat abscope-dir "/" abscope-file))
-;;      (forward-line 1)
-;;      ;;    (re-search-forward "\\*+ ")
-;;      (save-window-excursion
-;;        (org-open-at-point)
-;;        (current-buffer)))
-;;    )
 
 (defun abscope-matches-replace ()
   (interactive)
@@ -229,16 +194,13 @@ stag:")
     (call-interactively 'query-replace-regexp)))
 
 (defun abscope-follow-tag (tag)
-  "in code try to jump to the tag matching the thing at point"
+  "try to find an existing tag from the word at point"
   (interactive (list (read-string "tag:" (readWordOrRegion)))) 
   (find-file (concat abscope-dir "/" abscope-file))
   (end-of-buffer)
   (if (re-search-backward (format "^\\* %s" tag) nil t)
       (abscope-next-match)
-    (abq tag))) ;; todo: it would be nice to query a follow after process finishes
-
-
-;;(defun abscope-query-replace ()
+    (abq tag)))
 
 (provide 'abscope)
 

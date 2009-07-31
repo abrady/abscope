@@ -26,6 +26,7 @@ typedef struct CParse
     Parse defines;
     Parse enums;
     Parse vars;
+    Parse srcfiles;
     
     // state info
     File *fp;
@@ -47,6 +48,7 @@ typedef struct CParse
 // invocation
 // *************************************************************************
 int c_ext(char *file);
+int c_parse_files(CParse *cp, DirScan *scan);
 int c_parse_file(CParse *cp, char *fn);
 int c_on_processing_finished(CParse *cp);
 
