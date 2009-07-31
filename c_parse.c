@@ -119,42 +119,38 @@ int c_findenums(CParse *cp, char *sn)
 
 int c_findsrcfile(CParse *cp, char *sn)
 {
-    int res = 0;
-    int i;
-    AvlTree t = {0};
-    Parse *ps[128];
-    int n = 0;
-    ps[n++] = &cp->structs;
-    ps[n++] = &cp->structrefs;
-    ps[n++] = &cp->funcs;
-    ps[n++] = &cp->funcrefs;
-    ps[n++] = &cp->defines;
-    ps[n++] = &cp->enums;
-    ps[n++] = &cp->vars;
-    for(i = 0; i<n; ++i)
+    // just lazy: build src files now.
+    if(!cp->srcfiles.n_locs)
     {
-        int j;
-        for(j = 0; j<ps[i]->n_locs; ++j)
+        int i;
+        AvlTree t = {0};
+        Parse *ps[128];
+        int n = 0;
+        ps[n++] = &cp->structs;
+        ps[n++] = &cp->structrefs;
+        ps[n++] = &cp->funcs;
+        ps[n++] = &cp->funcrefs;
+        ps[n++] = &cp->defines;
+        ps[n++] = &cp->enums;
+        ps[n++] = &cp->vars;
+        for(i = 0; i<n; ++i)
         {
-            LocInfo *li = ps[i]->locs + j;
-            char *fn = fname_nodir(li->file);
-            if(0 == stricmp(fn,sn) && !avltree_find(&t,li->file))
+            int j;
+            for(j = 0; j<ps[i]->n_locs; ++j)
             {
-                LocInfo tmp = {0};
-                tmp.file = li->file;
-                tmp.tag = fname_nodir(li->file);
-                tmp.referrer = tmp.tag;
-                tmp.lineno = 1; 
-                tmp.line = tmp.file;
-                locinfo_print(&tmp);
-                avltree_insert(&t,li->file);
-                res++;
+                LocInfo *li = ps[i]->locs + j;
+                char *fn = fname_nodir(li->file);
+                if(0 == stricmp(fn,sn) && !avltree_find(&t,li->file))
+                {
+                    avltree_insert(&t,li->file);
+                    parse_add_locinfo(&cp->srcfiles,li->file,1,li->file,fname_nodir(li->file),li->file,0);
+                }
             }
         }
+        avltree_cleanup(&t,0);
     }
-    
-    avltree_cleanup(&t,0);
-    return res;
+
+    return parse_print_search_tag(&cp->srcfiles,sn);
 }
 
 
@@ -589,7 +585,6 @@ static void parse_var_decls(CParse *p, StackElt *stack, int n_stack, char *func_
 {
     StackElt *top = NULL;
     StackElt *type = NULL;
-    StackElt *var = NULL;
     int n_stack_in = n_stack;
     for(;;)
     {
@@ -617,7 +612,7 @@ static void parse_var_decls(CParse *p, StackElt *stack, int n_stack, char *func_
             }
             break;
         case '=':
-            parse_expr(p,stack,n_stack,func_ctxt);
+            parse_expr(p,stack,n_stack,func_ctxt, 0);
             n_stack = n_stack_in;
         }
     }

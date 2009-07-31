@@ -89,6 +89,54 @@ static int abscope_test()
 
 static CParse g_cp;
 
+static int c_query_flags_from_str(char *a_in)
+{
+    char *a = a_in;
+    int c_query_flags = 0;
+    if(!a)
+        return 0;
+    while(*a && !isspace(*a))
+    {
+        
+        switch(*a)
+        {
+        case 'd':
+            c_query_flags |= CQueryFlag_Defines;
+            break;
+        case 'e':
+            c_query_flags |= CQueryFlag_Enums;
+            break;
+        case 's':
+            c_query_flags |= CQueryFlag_Structs;
+            break;
+        case 'S':
+            c_query_flags |= CQueryFlag_Structrefs;
+            break;
+        case 'f':
+            c_query_flags |= CQueryFlag_Funcs;
+            break;
+        case 'F':
+            c_query_flags |= CQueryFlag_Funcrefs;
+            break;
+        case 'c':
+            c_query_flags |= CQueryFlag_Srcfile;
+            break;
+        case 'a':
+            c_query_flags = 0xffffffff;
+            break;
+        case 'v':
+            c_query_flags |= CQueryFlag_Vars;
+            break;
+        default:
+            fprintf(stderr, "unknown query option %c in %s\n",*a, a_in);
+            return 0;
+        };
+        a++;
+    }
+    return c_query_flags;
+}
+
+
 int main(int argc, char **argv)
 {
     BOOL loop_query = 0;
@@ -168,43 +216,7 @@ int main(int argc, char **argv)
                 break;
             case 'Q':               // Query for something 
                 query_str = argv[++i];
-                while(*a && !isspace(*a))
-                {
-                    switch(*a)
-                    {
-                    case 'd':
-                        c_query_flags |= CQueryFlag_Defines;
-                        break;
-                    case 'e':
-                        c_query_flags |= CQueryFlag_Enums;
-                        break;
-                    case 's':
-                        c_query_flags |= CQueryFlag_Structs;
-                        break;
-                    case 'S':
-                        c_query_flags |= CQueryFlag_Structrefs;
-                        break;
-                    case 'f':
-                        c_query_flags |= CQueryFlag_Funcs;
-                        break;
-                    case 'F':
-                        c_query_flags |= CQueryFlag_Funcrefs;
-                        break;
-                    case 'c':
-                        c_query_flags |= CQueryFlag_Srcfile;
-                        break;
-                    case 'a':
-                        c_query_flags = 0xffffffff;
-                        break;
-                    case 'v':
-                        c_query_flags |= CQueryFlag_Vars;
-                        break;
-                    default:
-                        fprintf(stderr, "unknown query option %c in %s\n",*a, argv[i-1]);
-                        return -1;
-                    };
-                    a++;
-                }                
+                c_query_flags = c_query_flags_from_str(a);
                 break;
             case 'R':
                 i++;
@@ -257,12 +269,10 @@ int main(int argc, char **argv)
     
     if(query_str)
     {
-        char buf[1024];
+        char query_buf[1024];
+        char flag_buf[32];
         if(0==strcmp(query_str,"-"))
-        {
             loop_query = TRUE;
-            query_str = buf;
-        }
 
         if(c_load(cp)<0)
             return -1;
@@ -270,7 +280,12 @@ int main(int argc, char **argv)
         do
         {
             if(loop_query)
-                while(0==scanf("%s",query_str));
+            {
+                scanf_s("%s %s",flag_buf, DIMOF(flag_buf), query_buf, DIMOF(query_buf));
+                c_query_flags = c_query_flags_from_str(flag_buf);
+                query_str = query_buf;
+            }
+            
             query_timer = timer_get();
             query_timer_load = timer_diffelapsed(query_timer);
             

@@ -26,6 +26,7 @@ typedef struct CParse
     Parse defines;
     Parse enums;
     Parse vars;
+    Parse srcfiles;
     
     // state info
     FILE *fp;

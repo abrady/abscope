@@ -131,7 +131,10 @@ stag:")
   (abscope-re-launch)
     ;;(set-process-sentinel proc (make-proc-event-listener))
     ;;(set-process-filter proc  'proc-msg-listener)
-  (tq-enqueue abscope-tq (concat tag "\n") "^QUERY_DONE\n\n" abscope-proc 'proc-msg-listener)
+  (tq-enqueue abscope-tq (concat type " " tag "\n") "^QUERY_DONE\n\n" abscope-proc 'proc-msg-listener)
+  ;; *seems* to be more responsive if you do this
+  (accept-process-output abscope-proc 0.1 0 1) 
+  (tq-process-buffer abscope-tq)
   )
 
 (defun abq (tag)
