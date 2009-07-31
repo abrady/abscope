@@ -274,8 +274,10 @@ int main(int argc, char **argv)
         if(0==strcmp(query_str,"-"))
             loop_query = TRUE;
 
+        query_timer = timer_get();
         if(c_load(cp)<0)
             return -1;
+        query_timer_load = timer_diffelapsed(query_timer);
         
         do
         {
@@ -286,8 +288,6 @@ int main(int argc, char **argv)
                 query_str = query_buf;
             }
             
-            query_timer = timer_get();
-            query_timer_load = timer_diffelapsed(query_timer);
             
             query_timer = timer_get();
             res = c_query(cp,query_str,c_query_flags);

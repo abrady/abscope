@@ -7,6 +7,7 @@
  *
  ***************************************************************************/
 #include "locinfo.h"
+#include "pcre.h"
 #include "abserialize.h"
 
 static S64 locinfo_timer = 0;
@@ -296,19 +297,36 @@ int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *ta
 
 int parse_print_search_tag(Parse *p,char *tag)
 {
+    char *err_str = 0;
+    int err_val = 0;
+    pcre *re;
     int res = 0;
     int i;
+    int matches[10];
     TIMER_START();
+
+    re = pcre_compile(tag, PCRE_CASELESS, &err_str, &err_val, NULL);
+    if(!re)
+    {
+        if(err_str)
+            pcre_free(err_str);
+        return -1;
+    }
+
     for(i = 0; i < p->n_locs; ++i)
     {
-        LocInfo *li = p->locs+i;
-        if(0 == stricmp(tag,li->tag) || (li->referrer && 0 == stricmp(tag,li->referrer)))
+        LocInfo *li = p->locs+i; 
+#define TAG_MATCH(T) (T && pcre_exec(re,NULL,T,strlen(T),0,0,matches,DIMOF(matches))>=0)
+        if(TAG_MATCH(li->tag) || TAG_MATCH(li->referrer))
         {
             res++;
             locinfo_print(li);
         }
+#undef TAG_MATCH
     }
     TIMER_END(locinfo_timer);
+
+    pcre_free(re);
     return res;
 }
 

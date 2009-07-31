@@ -3,8 +3,9 @@
 @call "c:\Program Files\Microsoft Visual Studio 8\VC\bin\vcvars32.bat"
 @call "c:\Program Files (x86)\Microsoft Visual Studio 8\VC\bin\vcvars32.bat"
 @call "c:/Microsoft Visual Studio 8/VC/bin/vcvars32.bat"
-
 :after_vcvars
+
+@call killall abscope.exe
 
 @IF /I "%1" == "OPT" set opt=Y
 @IF /I "%COMPUTERNAME%" EQU "abrady" set opt=Y
@@ -22,7 +23,8 @@
 @REM /O2: maximize speed
 @REM /Og: global opt
 
-set INPUTS=Kernel32.lib abscope.c locinfo.c c_parse.c strs.c abutil.c abtree.c abhash.c
+@set LIBS= Kernel32.lib pcre.lib /D PCRE_STATIC
+@set INPUTS= %LIBS% abscope.c locinfo.c c_parse.c strs.c abutil.c abtree.c abhash.c
 @REM for real speed: /MD vs. /MT ? (single threaded vs. multi crt?)
 @IF /I "%opt%" EQU "Y" (
 set FLAGS=/O2 /Oi /Zi /MT
