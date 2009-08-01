@@ -29,7 +29,7 @@ typedef struct CParse
     Parse srcfiles;
     
     // state info
-    FILE *fp;
+    File *fp;
     char *parse_file;
     int   parse_line;
     char  parse_error[512];
@@ -48,6 +48,7 @@ typedef struct CParse
 // invocation
 // *************************************************************************
 int c_ext(char *file);
+int c_parse_files(CParse *cp, DirScan *scan);
 int c_parse_file(CParse *cp, char *fn);
 int c_on_processing_finished(CParse *cp);
 

@@ -32,19 +32,19 @@ Ctxt c"
        (file "")
        (lineno "1")
        (tag "")
-       (ref "")
+       (refname "")
        (ctxt "")
        (line "")
        (flds)
        (tmp)
        )
 
-    (setq flds '(file val lineno tag ref ctxt line))
+    (setq flds '(file val lineno tag refname ctxt line))
 ;;    (setq hval (car flds))
 ;;    (symbol-value hval)
     (setq lines (split-string struct-block "\n"))
     (loop for i in lines do
-          (if (string-match "^\\(.*?\\) +\\(.*\\)" i)
+          (if (string-match "^\t\\(.*?\\) +\\(.*\\)" i)
               (progn
                 (setq fld (match-string 1 i))
                 (setq val (match-string 2 i))
@@ -65,10 +65,10 @@ Ctxt c"
     ;; insertion
 
     ;; tag: not really useful as a field to display.
-;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) ref lineno ctxt line))
+;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) refname lineno ctxt line))
 
 ;;  ** storeCommon.c:func store_Validate(222) pDef: 	if (pDef->eContents != Store_All && pDef->bSellEnabled
-;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) ctxt lineno ref line))
+;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) ctxt lineno refname line))
 
 ;; bSellEnabled:
 ;; struct ContactDialog: bool bSellEnabled; -- just the line
@@ -83,7 +83,7 @@ Ctxt c"
 ;; (abs-print-locinfo "LocInfo
 ;; File foo
 ;; Line n
-;; Ref r
+;; Refname r
 ;; Ctxt c
 ;; ")   
 

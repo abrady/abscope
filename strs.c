@@ -151,7 +151,7 @@ void strs_cleanup(char **strs, int n_strs)
 
 static int strpool_tree_traverser_cb(AvlNode *n, void *ctxt)
 {
-    FILE *fp = (FILE*)ctxt;
+    File *fp = (File*)ctxt;
     return string_binwrite(fp,n->p);
 }
 

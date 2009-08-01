@@ -27,7 +27,7 @@ static void locinfo_cleanup(LocInfo *l)
 }
 
 
-static ABINLINE int locinfo_write(FILE *fp, LocInfo *l)
+static ABINLINE int locinfo_write_eachfield(File *fp, LocInfo *l)
 {
     int res = 0;
     TIMER_START();
@@ -41,7 +41,7 @@ static ABINLINE int locinfo_write(FILE *fp, LocInfo *l)
     return res;
 }
 
-static ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
+static ABINLINE int locinfo_read_eachfield(File *fp, LocInfo *l)
 {
     int res = 0;
     TIMER_START();
@@ -55,7 +55,10 @@ static ABINLINE int locinfo_read(FILE *fp, LocInfo *l)
     return res;
 }
 
-static int parse_write(FILE *fp, Parse *p)
+#define locinfo_read locinfo_read_eachfield
+#define locinfo_write locinfo_write_eachfield
+
+static int parse_write(File *fp, Parse *p)
 {
     char *d;
     char *strdata;
@@ -102,14 +105,14 @@ static int parse_write(FILE *fp, Parse *p)
         tmp.file     = strpool_find_str(&sp,li->file);
         tmp.lineno   = li->lineno;
         tmp.line     = strpool_find_str(&sp,li->line);
-        res += fwrite(&tmp,sizeof(tmp),1,fp);   // 3 write locs
+        res += abfwrite(&tmp,sizeof(tmp),1,fp);   // 3 write locs
     }
     strpool_cleanup(&sp);
     free(strdata);
     return res;
 }
 
-static int parse_read(FILE *fp, Parse *p)
+static int parse_read(File *fp, Parse *p)
 {
     int i;
     int n;
@@ -140,7 +143,7 @@ static int parse_read(FILE *fp, Parse *p)
 int absfile_write_parse(char *fn, Parse *p)
 {
     int i;
-    FILE *fp;
+    File *fp;
 
     TIMER_START();
 
@@ -152,7 +155,7 @@ int absfile_write_parse(char *fn, Parse *p)
     }
     
     // write infos
-    fwrite(&p->n_locs,sizeof(p->n_locs),1,fp);
+    abfwrite(&p->n_locs,sizeof(p->n_locs),1,fp);
     for(i = 0; i < p->n_locs; ++i)
     {
         if(0!=locinfo_write(fp,p->locs+i))
@@ -162,7 +165,7 @@ int absfile_write_parse(char *fn, Parse *p)
         }
     }
     
-    fclose(fp);
+    abfclose(fp);
     TIMER_END(locinfo_timer);
     return 0;
 }
@@ -171,7 +174,7 @@ int absfile_read_parse(char *fn, Parse *p)
 {
     int i;
     int n_alloc;
-    FILE *fp = absfile_open_read(fn);
+    File*fp = absfile_open_read(fn);
     TIMER_START();
 
     if(!fp || !p)
@@ -182,7 +185,7 @@ int absfile_read_parse(char *fn, Parse *p)
     }
 
 
-    fread(&p->n_locs,sizeof(p->n_locs),1,fp);
+    abfread(&p->n_locs,sizeof(p->n_locs),1,fp);
     n_alloc = sizeof(*p->locs)*p->n_locs;
     p->locs = realloc(p->locs,n_alloc);
     ZeroStructs(p->locs,p->n_locs);
@@ -203,19 +206,29 @@ int absfile_read_parse(char *fn, Parse *p)
     return 0;
 }
 
-void locinfo_print(LocInfo *li)
+void locinfo_print(LocInfo *li, char *in)
 {
     char *referrer = li->referrer ? li->referrer : li->tag;
     char *ctxt = li->context?li->context:"";
-    printf("LocInfo\n"
-              "File %s\n"
-              "Lineno %i\n"
-              "Line %s\n"
-              "Tag %s\n"  
-              "Ref  %s\n"
-              "Ctxt %s\n"
-           "End\n",li->file, li->lineno, li->line, li->tag, referrer, ctxt);
-//    printf("** [[file:%s::%i][%s]] %s\n", li->file, li->line, referrer, ctxt);
+    if(!in)
+        in = "";
+    
+    printf("%sLocInfo\n"
+              "%s\tFile %s\n"
+              "%s\tLineno %i\n"
+              "%s\tLine %s\n"
+              "%s\tTag %s\n"  
+              "%s\tRefName  %s\n"
+              "%s\tCtxt %s\n"
+           ,in, in,li->file, in,li->lineno, in,li->line, in,li->tag, in,referrer, in,ctxt);
+    if(li->ref && 0)
+    {
+        char tmp[128];
+        printf("%s\tRef ",in);
+        sprintf_s(SSTR(tmp),"%s\t",in);
+        locinfo_print(li->ref,tmp);
+    }
+    printf("%sEnd\n",in);
 }
 
 
@@ -283,6 +296,7 @@ int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *ta
     
     p->locs    = realloc(p->locs,sizeof(*p->locs)*(++p->n_locs));
     l          = p->locs+p->n_locs-1;
+    ZeroStruct(l);
     l->tag     = parse_find_add_str(p,tag);
     l->referrer= parse_find_add_str(p,referrer);
     l->context = parse_find_add_str(p,ctxt);
@@ -320,7 +334,7 @@ int parse_print_search_tag(Parse *p,char *tag)
         if(TAG_MATCH(li->tag) || TAG_MATCH(li->referrer))
         {
             res++;
-            locinfo_print(li);
+            locinfo_print(li,NULL);
         }
 #undef TAG_MATCH
     }

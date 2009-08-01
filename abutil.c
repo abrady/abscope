@@ -146,3 +146,25 @@ char *fname_nodir(char *fname)
         return tmp+1;
     return NULL;
 }
+
+int errorfv(int lvl, char *msg,va_list args)
+{
+    char *e = 0;
+    if(!lvl)
+        return 0;
+    str_vsprintf(&e,msg,args);
+    fprintf(stderr,"fatal error: %s",msg);
+    assert(lvl < ErrorLvl_Fatal);
+    free(e);
+    return 1;
+}
+
+int errorf(int lvl, char *fmt, ...)
+{
+    int r;
+    va_list vl;
+    va_start(vl,fmt);
+    r = errorfv(lvl,fmt,vl);
+    va_end(vl);
+    return r;
+}

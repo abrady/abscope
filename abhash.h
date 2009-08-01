@@ -28,11 +28,14 @@ typedef struct HashTable
     int (*cmpfp)(const void*, const void*);
 } HashTable;
 
+typedef void (HashCleanupFp)(HashNode *n, void *ctxt);
+
+
 HashNode *hash_findnode(HashTable *ht, char *key);
 void     *hash_find(HashTable *ht, char *key);
 BOOL      hash_exists(HashTable *ht, char *key);
 BOOL      hash_insert(HashTable *ht, char *key, void *p);
-void      hash_cleanup(HashTable *ht);
+void      hash_cleanup(HashTable *ht, HashCleanupFp *cb);
 int       hash_test();
 
 #endif //ABHASHTABLE_H

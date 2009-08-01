@@ -4,24 +4,41 @@
  *
  * Module Description:
  * todo:
- * - fast load
  * - build a call tree
  * - logging
  * - add 'files', 'func decls'
  * - 'reward_CalculateKillCredit' doesn't parse properly : lex 0.f as a float number
  ***************************************************************************/
 #include "c_parse.h"
+#include "abhash.h"
 #include "abscope.h"
 #include "locinfo.h"
 
 int c_parse(CParse *ctxt);
+extern int g_verbose;
+
+int c_parse_files(CParse *cp, DirScan *scan)
+{
+    int i;
+    int res = 0;
+    for(i = 0; i < scan->n_files; ++i)
+    {
+        char *fn = scan->files[i];
+        if(g_verbose)
+            printf("%s\n",fn);
+        
+        if(c_ext(fn))
+            res += c_parse_file(cp,fn);
+    }
+    return res;
+}
 
 int c_parse_file(CParse *cp, char *fn)
 {
     int parse_res = 0;
     cp->parse_file = fn;
     cp->parse_line = 1;
-    cp->fp = fopen(cp->parse_file,"rb");
+    cp->fp = abfopen(cp->parse_file,File_R);
     
     if(!cp->fp)
     {
@@ -32,14 +49,49 @@ int c_parse_file(CParse *cp, char *fn)
     {
         printf("failed to parse file %s, error(%i):%s\n",cp->parse_file,parse_res,cp->parse_error);
     }
-    fclose(cp->fp);
+    abfclose(cp->fp);
     return parse_res;
 }
+
+static void fixup_refs(Parse *c, Parse *p)
+{
+    int i;
+    int j;
+    for(i = 0; i < c->n_locs; ++i)
+    {
+        LocInfo *l = c->locs + i;
+        
+        if(!l->referrer)
+            continue;
+
+        for(j = 0; j < p->n_locs; ++j)
+        {
+            LocInfo *q = p->locs + j;
+
+            if(0!=stricmp(l->referrer,q->tag))
+                continue;
+
+            l->ref = q;
+            break;
+        }
+    }
+}
+
+static void c_do_fixups(CParse *cp)
+{
+    // funcrefs  . referrer = caller
+    // structrefs. referrer = type
+    fixup_refs(&cp->funcrefs,&cp->funcs);
+    fixup_refs(&cp->structrefs,&cp->structs);
+}
+
 
 int c_on_processing_finished(CParse *cp)
 {   
     int res = 0;
-    
+
+    c_do_fixups(cp);
+
     printf("%i structs\n",cp->structs.n_locs);
     res += absfile_write_parse("c_structs.abs",&cp->structs);
 
@@ -81,6 +133,7 @@ int c_load(CParse *cp)
         res += absfile_read_parse("c_enums.abs",&cp->enums);
     if(file_exists("c_vars.abs"))
         res += absfile_read_parse("c_vars.abs",&cp->vars);
+    c_do_fixups(cp);
     return res;
 }
 
@@ -154,6 +207,11 @@ int c_findsrcfile(CParse *cp, char *sn)
 }
 
 
+int c_findvars(CParse *cp, char *sn)
+{
+    return parse_print_search_tag(&cp->vars,sn);
+}
+
 
 int c_query(CParse *cp, char *tag, int query_flags)
 {
@@ -173,7 +231,7 @@ int c_query(CParse *cp, char *tag, int query_flags)
     if(query_flags & CQueryFlag_Srcfile)
         res += c_findsrcfile(cp,tag);
     if(query_flags & CQueryFlag_Vars)
-        res += parse_print_search_tag(&cp->vars,tag);
+        res += c_findvars(cp,tag);
     printf("QUERY_DONE\n\n");
     fflush(stdout);
     return res;
@@ -302,34 +360,42 @@ typedef struct StackElt
 
 #define MAX_STACK 256
 
-static void c_add_struct(CParse *ctxt, char *struct_name, int lineno)
+static void c_add_struct(CParse *p, char *struct_name, int lineno)
 {
-    parse_add_locinfof(&ctxt->structs,ctxt->parse_file,lineno,ctxt->line,struct_name,NULL,"struct %s", struct_name);
+    parse_add_locinfof(&p->structs,p->parse_file,lineno,p->line,struct_name,NULL,"struct %s", struct_name);
 }
 
-static void c_add_enum_decl(CParse *ctxt, char *enum_name, int lineno)
+static void c_add_enum_decl(CParse *p, char *enum_name, int lineno)
 {
-    parse_add_locinfof(&ctxt->structs,ctxt->parse_file,lineno,ctxt->line,enum_name,NULL,"enum %s", enum_name);
+    parse_add_locinfof(&p->structs,p->parse_file,lineno,p->line,enum_name,NULL,"enum %s", enum_name);
 }
 
-static void c_add_enum(CParse *ctxt, char *enum_name, char *enum_typename, int lineno)
+static void c_add_enum(CParse *p, char *enum_name, char *enum_typename, int lineno)
 {
-    parse_add_locinfo(&ctxt->enums,ctxt->parse_file,lineno,ctxt->line,enum_name,"0",enum_typename);  // todo: enum value
+    parse_add_locinfo(&p->enums,p->parse_file,lineno,p->line,enum_name,"0",enum_typename);  // todo: enum value
 }
 
-static void c_add_structref(CParse *ctxt, StackElt *elt, char *type_name, char *func_ctxt)
+static void c_add_structref(CParse *p, StackElt *elt, char *type_name, char *func_ctxt)
 {
-    parse_add_locinfo(&ctxt->structrefs,ctxt->parse_file,elt->lineno,ctxt->line,elt->l.str,type_name,func_ctxt);
+    parse_add_locinfo(&p->structrefs,p->parse_file,elt->lineno,p->line,elt->l.str,type_name,func_ctxt);
 }
 
-static void c_add_funcdef(CParse *ctxt, int lineno, char *name, char *func_line)
+static void c_add_funcdef(CParse *p, int lineno, char *name, char *func_line)
 {
-    parse_add_locinfof(&ctxt->funcs,ctxt->parse_file,lineno,func_line,name,NULL,"func %s",name);
+    parse_add_locinfof(&p->funcs,p->parse_file,lineno,func_line,name,NULL,"func %s",name);
 }
 
-static void c_add_funcref(CParse *ctxt, StackElt *elt, char *funcref_ctxt)
+static char* strip_type(char *s)
 {
-    parse_add_locinfo(&ctxt->funcrefs,ctxt->parse_file,elt->lineno,ctxt->line,elt->l.str,funcref_ctxt,funcref_ctxt); 
+    char *t = s ? strchr(s,' ') : 0;
+    if(t)
+        return t + 1;
+    return s;
+}
+
+static void c_add_funcref(CParse *p, StackElt *elt, char *ctxt)
+{
+    parse_add_locinfo(&p->funcrefs,p->parse_file,elt->lineno,p->line,elt->l.str,strip_type(ctxt),ctxt); 
 }
 
 static void c_add_define(CParse *ctxt, char *define, int lineno)
@@ -944,8 +1010,8 @@ int c_lex(CParse *p, StackElt *top)
 // timing each getch call has too much overhead
 // #define GETC() ((timer_getc = timer_get()),(p->line[(p->i_line++)%DIMOF(p->line)] = (char)(c = getc(p->fp))),(p->getc_timing += timer_diff(timer_getc)),c)
 
-#define GETC() ((p->line[(p->i_line++)%DIMOF(p->line)] = (char)(c = getc(p->fp))),c)
-#define UNGETC() (p->i_line--,ungetc(c, p->fp)) 
+#define GETC() ((p->line[(p->i_line++)%DIMOF(p->line)] = (char)(c = abgetc(p->fp))),c)
+#define UNGETC() (p->i_line--,abungetc(c, p->fp)) 
 #define LEX_RET(VAL) { p->lex_timing += timer_diff(timer_start); \
         p->line[(p->i_line)%DIMOF(p->line)] = 0;           \
         return VAL;                                                 \
@@ -1190,13 +1256,17 @@ int c_parse_test()
     
 
     TEST(0==c_parse_file(&cp,"test/foo.c")); // todo: embed and write out if not existing.
+    c_on_processing_finished(&cp);
 
 #define TEST_LI(TAG,REF,CTXT)     TEST(0==strcmp(li->tag,TAG)); \
     TEST(0==strcmp(li->referrer,REF));                          \
     TEST(0==strbeginswith(li->context,CTXT));                   \
     li++;
 
-    TEST(cp.structrefs.n_locs == 13);
+#define TEST_L2(T,R,C) TEST(li->ref&&!strcmp(li->ref->tag,T));  \
+    TEST_LI(T,R,C);
+
+    TEST(cp.structrefs.n_locs == 14);
     li = cp.structrefs.locs;
     TEST(li->lineno == start_line + 3);
     TEST_LI("a",          "int",       "struct Foo");
@@ -1205,16 +1275,16 @@ int c_parse_test()
     TEST(li->lineno == start_line + 9);
     TEST_LI("bar_a",      "int",       "struct Bar");
     TEST_LI("baz_b",      "char",      "struct Bar");
-    TEST_LI("b",          "Foo",       "func test_func");
-    TEST_LI("c",          "Bar",       "func test_func");
-    TEST_LI("bar2",       "Foo",       "global var");
-    TEST_LI("hNameMsg",   "Message",  "struct Foo2");
-    TEST_LI("iSortID",    "U32",       "struct Foo2");
-    TEST_LI("bSearchable","bool",      "struct Foo2");
-    TEST_LI("eType",       "ItemType","struct Foo2");
-    TEST_LI("pBar",        "Bar",      "func test_func3");
-    TEST_LI("pBaz",        "Bar",      "func test_func3");
-    TEST_LI("foo",         "U32",      "func test_func3");
+    TEST_L2("b",          "Foo",       "func test_func");
+    TEST_L2("c",          "Bar",       "func test_func");
+    TEST_L2("bar2",       "Foo",       "global var");
+    TEST_L2("hNameMsg",   "Message",  "struct Foo2");
+    TEST_L2("iSortID",    "U32",       "struct Foo2");
+    TEST_L2("bSearchable","bool",      "struct Foo2");
+    TEST_L2("eType",       "ItemType","struct Foo2");
+    TEST_L2("pBar",        "Bar",      "func test_func3");
+    TEST_L2("pBaz",        "Bar",      "func test_func3");
+    TEST_L2("foo",         "U32",      "func test_func3");
 
 
     // structs

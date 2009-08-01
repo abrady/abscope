@@ -28,6 +28,18 @@
 #endif
 
 #define abassert(C) (break_if_debugging(),assert(C))
+typedef enum ErrorLvl
+{
+    ErrorLvl_None,
+    ErrorLvl_Warn,
+    ErrorLvl_Fatal,
+} ErrorLvl;
+int errorfv(ErrorLvl lvl, char *msg,va_list args);
+int errorf (ErrorLvl lvl, char *msg, ...);
+
+#define Errorf(MSG,...) errorf(ErrorLvl_Warn,MSG,__VA_ARGS__)
+#define abassertmsg(C,msg,...) (break_if_debugging(),(C)?errorf(ErrorLvl_Fatal,msg,__VA_ARGS__):0)
+#define STATIC_ASSERT(C) extern int (*static_assert_failed())[(x)?1:0]
 
 typedef int S32;
 typedef unsigned int U32;
@@ -54,8 +66,10 @@ typedef signed char S8;
 typedef int int32_t;
 
 #include "strs.h"
+#include "abfile.h"
 
 #define DIMOF(A) (sizeof(A)/sizeof(*(A)))
+#define SSTR(S) S,DIMOF(S)
 #define ZeroStruct(ptr) memset((ptr), 0, sizeof(*(ptr)))
 #define ZeroStructs(ptr,n) memset((ptr), 0, sizeof(*(ptr))*n)
 #define CopyStructs(Dst,Src,N) memmove(Dst,Src,N*sizeof(*(SRC)))

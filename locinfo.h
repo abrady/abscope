@@ -35,7 +35,7 @@
 //             Bar c; // tag = c, ref = Bar   , ctxt = func test_func
 //         }
 //     }while(0);    
-//     foo();         // tag = foo, ref = NULL, ctxt = func test_func
+//     foo();         // tag = foo, ref = test_func, ctxt = func test_func
 //     b.a = 1;       // tag = a  , ref = b   , ctxt = func test_func
 //     a   = 0;       // tag = a  , ref = NULL, ctxt = func test_func
 // }
@@ -47,11 +47,14 @@
 typedef struct LocInfo
 {
     char *tag;
-    char *referrer; // for refs, the function where this call happens
+    char *referrer;
     char *context;
     char *file;
     int lineno;
     char *line;
+
+    // scratch pointer
+    struct LocInfo *ref;
 } LocInfo;
 
 typedef struct TagRef
@@ -72,7 +75,7 @@ typedef struct Parse
 int absfile_write_parse(char *fn, Parse *p);
 int absfile_read_parse(char *fn, Parse *p);
 
-void locinfo_print(LocInfo *li);
+// void locinfo_print(LocInfo *li);
 // int locinfo_vprintf(LocInfo *li,char *fmt,va_list args);
 // int locinfo_printf(LocInfo *li,char *fmt,...);
 
