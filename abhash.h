@@ -36,6 +36,7 @@ void     *hash_find(HashTable *ht, char *key);
 BOOL      hash_exists(HashTable *ht, char *key);
 BOOL      hash_insert(HashTable *ht, char *key, void *p);
 void      hash_cleanup(HashTable *ht, HashCleanupFp *cb);
+void      hash_resize(HashTable *ht, int n_new);
 int       hash_test();
 
 #endif //ABHASHTABLE_H

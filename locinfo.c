@@ -213,22 +213,23 @@ void locinfo_print(LocInfo *li, char *in)
     if(!in)
         in = "";
     
-    printf("%sLocInfo\n"
-              "%s\tFile %s\n"
-              "%s\tLineno %i\n"
-              "%s\tLine %s\n"
-              "%s\tTag %s\n"  
-              "%s\tRefName  %s\n"
-              "%s\tCtxt %s\n"
+    printf("%s(LocInfo\n"
+              "%s\t(File    \"%s\")\n"
+              "%s\t(Lineno  \"%i\")\n"
+              "%s\t(Line    \"%s\")\n"
+              "%s\t(Tag     \"%s\")\n"  
+              "%s\t(RefName \"%s\")\n"
+              "%s\t(Ctxt    \"%s\")\n"
            ,in, in,li->file, in,li->lineno, in,li->line, in,li->tag, in,referrer, in,ctxt);
-    if(li->ref && 0)
+    if(li->ref)
     {
         char tmp[128];
-        printf("%s\tRef ",in);
+        printf("%s\t(Ref ",in);
         sprintf_s(SSTR(tmp),"%s\t",in);
         locinfo_print(li->ref,tmp);
+        printf("%s\t)\n", in);
     }
-    printf("%sEnd\n",in);
+    printf("%s)\n",in);
 }
 
 

@@ -16,8 +16,36 @@
         )
     )
 )
+;; (setq foo-str "'(
+;; (LocInfo 
+;;   (File \"a b\")
+;;   (Lineno 1)
+;;   (Line \"a b c d;\")
+;;   (Tag \"asdf\")
+;;   (RefName \"refname\")
+;;   (Ctxt \"ctxt\")
+;;   (Ref (LocInfo 
+;;     (File \"file ref\")
+;;     (Lineno 3)
+;;     (Line \"ref line str2;\")
+;;     (Tag \"ref asdf2\")
+;;     (RefName \"sub refname2\")
+;;     (Ctxt \"sub ctxt2\")
+;;   ))
+;; )
+;; (LocInfo 
+;; (File \"file2\")
+;; (Lineno 2)
+;; (Line \"line str2;\")
+;;       (Tag \"asdf2\")
+;; (RefName \"refname2\")
+;; (Ctxt \"ctxt2\")
+;; )
+;; )")
+;; (setq foo (eval (read foo-str)
+;; ))
 
-(defun abs-print-locinfo (struct-block)
+(defun abs-print-locinfo (struct-block prefix)
   "print out a locinfo block of the form:
 LocInfo
 File foo
@@ -26,88 +54,45 @@ Ref r
 Ctxt c"
   (let
       (
-       (lines)
-       (fld "")
-       (val "")
-       (file "")
-       (lineno "1")
-       (tag "")
-       (refname "")
-       (ctxt "")
-       (line "")
-       (flds)
-       (tmp)
+       (File "") (Lineno "1")
+       (Tag "") (RefName "") (Ctxt "") (Line "") (flds)
        )
-
-    (setq flds '(file val lineno tag refname ctxt line))
-;;    (setq hval (car flds))
-;;    (symbol-value hval)
-    (setq lines (split-string struct-block "\n"))
-    (loop for i in lines do
-          (if (string-match "^\t\\(.*?\\) +\\(.*\\)" i)
-              (progn
-                (setq fld (match-string 1 i))
-                (setq val (match-string 2 i))
-                (loop for j in flds do
-                      (if (equal (symbol-name j) (downcase fld))
-                          (progn
-                            (set j val)
-                            (return)
-                            )
-                        )
-                      
+    (setq flds '(File Lineno Tag RefName Ctxt Line))
+    (loop with sym for i in struct-block do
+          (setq sym (car i))
+          (if (and (eql 'Ref (car i)) (eql 'LocInfo (caadr i)))
+              (abs-print-locinfo (cdadr i) (concat prefix "*"))
+              (loop for j in flds do
+                    (if (eql sym j)
+                        (set j (cadr i))
                       )
-                )
-            )
+                    )
+              )
           )
-    
-    ;; *************************************************************************
-    ;; insertion
-
-    ;; tag: not really useful as a field to display.
-;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) refname lineno ctxt line))
-
-;;  ** storeCommon.c:func store_Validate(222) pDef: 	if (pDef->eContents != Store_All && pDef->bSellEnabled
-;;    (insert (format "** [[file:%s::%s][%s:%s(%s)]] %s: %s\n" file lineno (file-name-nondirectory file) ctxt lineno refname line))
-
-;; bSellEnabled:
-;; struct ContactDialog: bool bSellEnabled; -- just the line
-;; func  store_Validate: if (pDef->eContents != Store_All && pDef->bSellEnabled -- just the line
-    (insert (format "** [[file:%s::%s][%s]]" file lineno (or (string-replace-match ".*? " ctxt "") (file-name-nondirectory file))))
-;;    (loop for i from (length ctxt) to 16 do ;; can't use indent-to as the the whole expression confuses it until org-mode hides it
-;;          (insert " "))
-    (insert (format "\t%s\n" (stripLeadingWhitespace line)))
+    (insert (format "%s [[file:%s::%s][%s]]" prefix File Lineno (or (string-replace-match ".*? " Ctxt "") (file-name-nondirectory File))))
+    (insert (format "\t%s\n" (stripLeadingWhitespace Line)))
     )
   )
 
-;; (abs-print-locinfo "LocInfo
-;; File foo
-;; Line n
-;; Refname r
-;; Ctxt c
-;; ")   
+
+;; (abs-print-locinfo (cdar foo) "**")
 
 (defun proc-msg-listener (proc str) 
   (with-current-buffer (process-buffer proc)
     (insert ":") ;; subtle notice of when the process finishes
-      (save-excursion
+    (save-excursion
       ;; (goto-char (process-mark proc)) todo: proper mark saving.
       (let
           (
-           (struct-name)
-           (lines)
+           (forms)
            )
-        (setq lines (split-string str "\nEnd\n" t)) ;; split into blocks of structs
-        (loop for i in lines do
-              (if (string-match "\\(.*?\\)\n" i)
-                  (progn
-                    (setq struct-name (downcase (match-string 1 i)))
-                    (cond
-                     ((equal struct-name "locinfo") (abs-print-locinfo i))))))
-        ;;      (insert str)
+        (setq forms (eval (read str)))
+        (loop for i in forms do
+              (case (car i)
+                ('LocInfo (abs-print-locinfo (cdr i) "**"))
+                (t (message "unknown form")))
+              )
         )
-
-      ;; skip to link for first match to get rid of just a few button presses 
       (set-marker (process-mark proc) (point))
       )
     (re-search-forward "\\[\\[" (line-end-position) t)
@@ -131,7 +116,7 @@ stag:")
   (abscope-re-launch)
     ;;(set-process-sentinel proc (make-proc-event-listener))
     ;;(set-process-filter proc  'proc-msg-listener)
-  (tq-enqueue abscope-tq (concat type " " tag "\n") "^QUERY_DONE\n\n" abscope-proc 'proc-msg-listener)
+  (tq-enqueue abscope-tq (concat type " " tag "\n") "^QUERY_DONE)\n\n" abscope-proc 'proc-msg-listener)
   ;; *seems* to be more responsive if you do this
   (accept-process-output abscope-proc 0.1 0 1) 
   (tq-process-buffer abscope-tq)

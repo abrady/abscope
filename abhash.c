@@ -130,6 +130,54 @@ BOOL hash_exists(HashTable *ht, char *key)
     return hash_findnode(ht,key) != NULL;
 }
 
+void hash_resize(HashTable *ht, int n_new)
+{
+    HashNode *new_elts;
+    int a,b;
+    int i;
+    HashNode *n;
+    U32 off;
+    
+    // size must be power of 2, find msb and double that
+    a = n_new;
+    do
+    {
+        b = a;
+        a=(a&(a-1));
+    } while(a);
+    if(b<=0)
+        b = 16;
+    n_new = b*2;
+    
+    // do this first to give realloc a chance to keep this in the
+    // same spot
+    new_elts = calloc(sizeof(*ht->elts),n_new);
+    for(i = 0; i<ht->n_elts; ++i)
+    {
+        HashNode *n_old = ht->elts + i;
+        int j;
+        
+        if(!n_old->hash)
+            continue;
+        for(j = 0; j < n_new; ++j)
+        {
+            off = ((n_old->hash + j) & (n_new - 1));
+            n = new_elts + off;
+            if(!n->hash)
+            {
+                *n = *n_old;
+                break;
+            }
+        }
+        if(j == n_new)
+            abassert(0 && "failed to re-hash");
+    }
+    free(ht->elts);
+    ht->elts = new_elts;
+    ht->n_elts = n_new;
+}
+
+
 BOOL hash_insert(HashTable *ht, char *key, void *p)
 {
     U32 off;
@@ -157,38 +205,7 @@ BOOL hash_insert(HashTable *ht, char *key, void *p)
     // check for need to rehash
 #define PT75(N) (((N)>>2) + ((N)>>1)) // 75% = 1/2 + 1/4
     if(ht->n_used > PT75(ht->n_elts))
-    {
-        HashNode *new_elts;
-        int n_new = ht->n_elts;
-        n_new *= 2;
-        
-        // do this first to give realloc a chance to keep this in the
-        // same spot
-        new_elts = calloc(sizeof(*ht->elts),n_new);
-        for(i = 0; i<ht->n_elts; ++i)
-        {
-            HashNode *n_old = ht->elts + i;
-            int j;
-            
-            if(!n_old->hash)
-                continue;
-            for(j = 0; j < n_new; ++j)
-            {
-                off = ((n_old->hash + j) & (n_new - 1));
-                n = new_elts + off;
-                if(!n->hash)
-                {
-                    *n = *n_old;
-                    break;
-                }
-            }
-            if(j == n_new)
-                abassert(0 && "failed to re-hash");
-        }
-        free(ht->elts);
-        ht->elts = new_elts;
-        ht->n_elts = n_new;
-    }
+        hash_resize(ht,ht->n_elts*2);
 #undef PT75
     
     hash = ht->hashfp(key, ht->ctxt);

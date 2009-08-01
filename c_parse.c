@@ -57,24 +57,26 @@ static void fixup_refs(Parse *c, Parse *p)
 {
     int i;
     int j;
+    HashTable ht = {0};
+    ht.cmpfp = stricmp;
+    
+    hash_resize(&ht,p->n_locs*2);
+    for(j = 0; j < p->n_locs; ++j)
+    {
+        LocInfo *q = p->locs + j;
+        hash_insert(&ht,q->tag,q);
+    }    
+
     for(i = 0; i < c->n_locs; ++i)
     {
         LocInfo *l = c->locs + i;
-        
-        if(!l->referrer)
+        LocInfo *q;
+        q = hash_find(&ht,l->referrer);
+        if(!q)
             continue;
-
-        for(j = 0; j < p->n_locs; ++j)
-        {
-            LocInfo *q = p->locs + j;
-
-            if(0!=stricmp(l->referrer,q->tag))
-                continue;
-
-            l->ref = q;
-            break;
-        }
+        l->ref = q;
     }
+    hash_cleanup(&ht,NULL);
 }
 
 static void c_do_fixups(CParse *cp)
@@ -216,6 +218,7 @@ int c_findvars(CParse *cp, char *sn)
 int c_query(CParse *cp, char *tag, int query_flags)
 {
     int res = 0;
+    printf("'(\n");
     if(query_flags & CQueryFlag_Structs)
         res += c_findstructs(cp,tag);
     if(query_flags & CQueryFlag_Enums)
@@ -232,7 +235,7 @@ int c_query(CParse *cp, char *tag, int query_flags)
         res += c_findsrcfile(cp,tag);
     if(query_flags & CQueryFlag_Vars)
         res += c_findvars(cp,tag);
-    printf("QUERY_DONE\n\n");
+    printf("QUERY_DONE)\n\n");
     fflush(stdout);
     return res;
 }
