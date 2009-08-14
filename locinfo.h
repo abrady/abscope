@@ -43,6 +43,7 @@
 // Foo **bar2;        // tag = bar2, ref = Foo, ctxt = "global var"
 
 // #define FOO()      // tag = FOO, ref = NULL, ctxt = NULL
+typedef struct Parse Parse;
 
 typedef struct LocInfo
 {
@@ -53,6 +54,8 @@ typedef struct LocInfo
     int lineno;
     char *line;
 
+    Parse *child;
+    
     // scratch pointer
     struct LocInfo *ref;
 } LocInfo;

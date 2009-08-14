@@ -81,10 +81,24 @@ static void fixup_refs(Parse *c, Parse *p)
 
 static void c_do_fixups(CParse *cp)
 {
+    int i;
     // funcrefs  . referrer = caller
     // structrefs. referrer = type
     fixup_refs(&cp->funcrefs,&cp->funcs);
     fixup_refs(&cp->structrefs,&cp->structs);
+    for(i = 0; i < cp->structs.n_locs; ++i)
+    {
+//        int j;
+        LocInfo *s = cp->structs.locs + i;
+        if(!s->child)
+            continue;
+        fixup_refs(s->child,&cp->structs);
+//         for(j = 0; j < s->child->n_locs; ++j)
+//         {
+//             LocInfo *c = s->child->locs + j;
+//             c->ref = s;
+//         }
+    }
 }
 
 
@@ -115,6 +129,9 @@ int c_on_processing_finished(CParse *cp)
     printf("%i vars\n",cp->vars.n_locs);
     res += absfile_write_parse("c_vars.abs",&cp->vars);
 
+    printf("%i srcfiles\n",cp->srcfiles.n_locs);
+    res += absfile_write_parse("c_srcfiles.abs",&cp->srcfiles);
+
     return res;
 }
 
@@ -135,6 +152,8 @@ int c_load(CParse *cp)
         res += absfile_read_parse("c_enums.abs",&cp->enums);
     if(file_exists("c_vars.abs"))
         res += absfile_read_parse("c_vars.abs",&cp->vars);
+    if(file_exists("c_srcfiles.abs"))
+        res += absfile_read_parse("c_srcfiles.abs",&cp->srcfiles);
     c_do_fixups(cp);
     return res;
 }
@@ -172,42 +191,10 @@ int c_findenums(CParse *cp, char *sn)
     return parse_print_search_tag(&cp->enums,sn);
 }
 
-int c_findsrcfile(CParse *cp, char *sn)
+int c_findsrcfiles(CParse *cp, char *sn)
 {
-    // just lazy: build src files now.
-    if(!cp->srcfiles.n_locs)
-    {
-        int i;
-        AvlTree t = {0};
-        Parse *ps[128];
-        int n = 0;
-        ps[n++] = &cp->structs;
-        ps[n++] = &cp->structrefs;
-        ps[n++] = &cp->funcs;
-        ps[n++] = &cp->funcrefs;
-        ps[n++] = &cp->defines;
-        ps[n++] = &cp->enums;
-        ps[n++] = &cp->vars;
-        for(i = 0; i<n; ++i)
-        {
-            int j;
-            for(j = 0; j<ps[i]->n_locs; ++j)
-            {
-                LocInfo *li = ps[i]->locs + j;
-                char *fn = fname_nodir(li->file);
-                if(0 == stricmp(fn,sn) && !avltree_find(&t,li->file))
-                {
-                    avltree_insert(&t,li->file);
-                    parse_add_locinfo(&cp->srcfiles,li->file,1,li->file,fname_nodir(li->file),li->file,0);
-                }
-            }
-        }
-        avltree_cleanup(&t,0);
-    }
-
     return parse_print_search_tag(&cp->srcfiles,sn);
 }
-
 
 int c_findvars(CParse *cp, char *sn)
 {
@@ -232,7 +219,7 @@ int c_query(CParse *cp, char *tag, int query_flags)
     if(query_flags & CQueryFlag_Funcrefs)
         res += c_findfuncrefs(cp,tag);
     if(query_flags & CQueryFlag_Srcfile)
-        res += c_findsrcfile(cp,tag);
+        res += c_findsrcfiles(cp,tag);
     if(query_flags & CQueryFlag_Vars)
         res += c_findvars(cp,tag);
     printf("QUERY_DONE)\n\n");
@@ -268,7 +255,7 @@ typedef enum c_tokentype
     FUNC_HEADER,
 
     // expressions
-//     EXPR,                // assign expr*
+//     EXPR,                
 //     EXPR_CONDITIONAL,         // (a && b || a && c) ? a : b
 //     EXPR_ASSIGN         // unary expr = conditionaal expr
 //     EXPR_PRIMARY,        // TOK, constant, string ( expr )
@@ -341,7 +328,9 @@ typedef enum c_tokentype
     AUTO_COMMAND,
 } c_tokentype;
 #define C_KWS_START TYPEDEF
-#define IS_INTRINSIC_TYPE(T) INRANGE(T,CHAR_TOK,DOUBLE+1)
+#define IS_INTRINSIC_TYPE(T) INRANGE(T,CHAR_TOK,VOID_TOK+1)
+#define INTRINSIC_TYPE CHAR_TOK: case SHORT_TOK: case INT_TOK:case LONG_TOK:case SIGNED:case UNSIGNED:case FLOAT_TOK:case DOUBLE:case VOID_TOK
+
 
 
 typedef struct StackElt
@@ -363,10 +352,19 @@ typedef struct StackElt
 
 #define MAX_STACK 256
 
-static void c_add_struct(CParse *p, char *struct_name, int lineno)
+static LocInfo* c_add_struct(CParse *p, char *struct_name, int lineno)
 {
-    parse_add_locinfof(&p->structs,p->parse_file,lineno,p->line,struct_name,NULL,"struct %s", struct_name);
+    int i = parse_add_locinfof(&p->structs,p->parse_file,lineno,p->line,struct_name,NULL,"struct %s", struct_name);
+    return p->structs.locs + i;
 }
+
+static void c_add_structmbr(CParse *p, LocInfo *s, StackElt *mbr, StackElt *mbr_type)
+{
+    if(!s->child)
+        s->child = calloc(sizeof(Parse),1);
+    parse_add_locinfof(s->child,p->parse_file,mbr->lineno,p->line,mbr->l.str,mbr_type->l.str,"struct %s", s->tag);
+}
+
 
 static void c_add_enum_decl(CParse *p, char *enum_name, int lineno)
 {
@@ -585,7 +583,7 @@ static void parse_enum_body(CParse *p, StackElt *stack, int n_stack, char *enum_
 // transition to this from:
 // - expression_stmt: expression;
 // -  
-static void parse_expr(CParse *p, StackElt *stack, int n_stack, char *ctxt, char terminating_tok) 
+static void parse_expr(CParse *p, StackElt *stack, int n_stack, char *ctxt, char terminating_tok, char terminating_tok2)  
 {
     StackElt *top = NULL;
     int n_stack_in = n_stack;
@@ -599,14 +597,17 @@ static void parse_expr(CParse *p, StackElt *stack, int n_stack, char *ctxt, char
         }
         
         NEXT_TOK();        
-        if(top->tok == terminating_tok)
+        if(top->tok==terminating_tok || top->tok == terminating_tok2)
+        {
+            stack[n_stack_in] = *top; // reduce to last token
             return;
+        }
         switch(top->tok)
         {
         case '(':
             if(top[-1].tok == TOK)
                 c_add_funcref(p,top-1,ctxt);
-            parse_expr(p,stack,n_stack,ctxt,')');
+            parse_expr(p,stack,n_stack,ctxt,')',0);
             n_stack = n_stack_in;
             break;
         case TOK: // keep this around
@@ -650,10 +651,9 @@ static void parse_expr(CParse *p, StackElt *stack, int n_stack, char *ctxt, char
     }
 }
 
-static void parse_var_decls(CParse *p, StackElt *stack, int n_stack, char *func_ctxt)
+static void parse_arglist(CParse *p, StackElt *stack, int n_stack, char *ctxt)
 {
     StackElt *top = NULL;
-    StackElt *type = NULL;
     int n_stack_in = n_stack;
     for(;;)
     {
@@ -664,33 +664,32 @@ static void parse_var_decls(CParse *p, StackElt *stack, int n_stack, char *func_
         }
         
         NEXT_TOK();        
-        if(top->tok == ';')
-            return;    
+        if(top->tok == ')')
+            return;
+        
         switch(top->tok)
         {
-        case TOK:
-            if(!type)
-            {
-                type = top;
-                n_stack_in = n_stack; // don't reduce past the type decl
-            }
-            else
-            {
-                c_add_structref(p,top,type->l.str,func_ctxt);
-                n_stack = n_stack_in;
-            }
+        case ',':
+            if(top[-1].tok == TOK)
+                c_add_var(ctxt,top-1,NULL,ctxt);
             break;
-        case '=':
-            parse_expr(p,stack,n_stack,func_ctxt, 0);
-            n_stack = n_stack_in;
-        }
+        case '(':
+            if(top[-1].tok == TOK)
+                c_add_funcref(p,top-1,ctxt);
+            break;
+        }       
     }
 }
 
-static void parse_func_body(CParse *p, StackElt *stack, int n_stack, char *func_ctxt)
+
+// var decls:
+// 1. storage  class: static auto register 
+// 2. type specifier: int, char, Foo
+// 3. declerator(s) : *bar, baz[10], (*fp)(params)
+static void parse_var_decls(CParse *p, StackElt *stack, int n_stack, char *ctxt)
 {
+    StackElt *last_vartype = NULL;
     StackElt *top = NULL;
-    int var_decls_allowed = 1;
     int n_stack_in = n_stack;
     for(;;)
     {
@@ -702,68 +701,47 @@ static void parse_func_body(CParse *p, StackElt *stack, int n_stack, char *func_
         
         NEXT_TOK();        
         if(top->tok == '}')
-            return;
+            goto done;
+
         switch(top->tok)
         {
         case '{':
             if(top[-1].tok == '=') // struct or array init
                 parse_to_tok(p,stack,n_stack,'}','{');
             else
-            {
-                parse_func_body(p,stack,n_stack,func_ctxt);
-                n_stack = n_stack_in;
-                var_decls_allowed = 0;
-            }
+                goto done;
             break;
-        case '(':
-            parse_expr(p,stack,n_stack,func_ctxt,')');
-            if(top[-1].tok == TOK) {
-                c_add_funcref(p,top-1,func_ctxt);
-                n_stack-=2;
-            }
-            else
-                n_stack--;
-            break;
+        case INTRINSIC_TYPE:
         case TOK:
+            if(!last_vartype)
+                last_vartype = top;
             break;
-        case ';':
-            // var decls:
-            // 1. storage  class: static auto register 
-            // 2. type specifier: int, char, Foo
-            // 3. declerator(s) : *bar, baz[10], (*fp)(params)
-            if(var_decls_allowed)
-            {
-                StackElt *t = stack+n_stack_in;
-                StackElt *type = NULL;
-                int intrinsic_decl = 0;
-                
-                for(;t < top; t++)
-                {
-                    if(t->tok == '=')
-                    {
-                        do
-                        {
-                            t++;
-                        } while(t < top && t->tok != ',');
-                        continue;
-                    }
-                    else if(!type && IS_INTRINSIC_TYPE(t->tok))
-                    {
-                        intrinsic_decl = 1;
-                        break; // don't bother with "int a;" decls
-                    }
-                    else if(!type && (t->tok == TOK))
-                        type = t;
-                    else if(type && t->tok == TOK)
-                        c_add_structref(p,t,type->l.str,func_ctxt);
-                }
-                // if no type, good chance that this is an expression
-                // statement, e.g a = 0;
-                if(!intrinsic_decl && (!type || type+1 == top))
-                    var_decls_allowed = 0;
-            }
+
+        case '=':
+            // n_stack-1 means reduce the expression onto the '='
+            parse_expr(p,stack,n_stack-1,ctxt,',',';');
+            // fall thru
+        case ',': 
+            // fall thru
+        case ';': 
+            if(top == last_vartype)
+                continue; // something goofy, but try to keep parsing
+            if(last_vartype)
+                c_add_structref(p,top-1,last_vartype->l.str,ctxt);
+            else if(top->tok == ';') // may be an a = 0; type of stmt
+                goto done;
+
+            if(top->tok == ';')
+                last_vartype = NULL;
+
             n_stack = n_stack_in;
             break;
+        case '(':
+            if(top[-1].tok == TOK)
+            {
+                parse_arglist(p,stack,n_stack,ctxt);
+                
+            }
             // ====================
             // statement detection, for ending var decl ability 
         case IF:
@@ -776,13 +754,63 @@ static void parse_func_body(CParse *p, StackElt *stack, int n_stack, char *func_
         case CONTINUE:
         case BREAK:
         case RETURN:
-            var_decls_allowed = 0;
+            goto done;
+            break;
+        case '*':
+            if(last_vartype)
+                stracat(last_vartype->l.str,"*");
+        }
+    }
+done:
+    if(top)
+        stack[n_stack_in] = *top;
+    else
+        ZeroStruct(stack+n_stack_in);
+}
+
+static void parse_func_body(CParse *p, StackElt *stack, int n_stack, char *func_ctxt)
+{
+    StackElt *top = NULL;
+    int n_stack_in = n_stack;
+
+    parse_var_decls(p,stack,n_stack,func_ctxt);
+    top = stack + n_stack;
+    if(top->tok == '}')
+        return; // function with only var decls
+
+    for(;;)
+    {
+        if(n_stack == MAX_STACK)
+        {
+            parser_error(p,top,"out of room on stack in %s. aborting.",__FUNCTION__);
             break;
         }
+        
+        if(top->tok == '}')
+            return;
+
+        switch(top->tok)
+        {
+        case '{':
+            parse_func_body(p,stack,n_stack,func_ctxt);
+            n_stack = n_stack_in;
+            break;
+        case '(':
+            parse_expr(p,stack,n_stack,func_ctxt,')',0);
+            if(top[-1].tok == TOK) {
+                c_add_funcref(p,top-1,func_ctxt);
+                n_stack-=2;
+            }
+            else
+                n_stack--;
+            break;
+        }
+
+        NEXT_TOK();
     }
 }
 
-static void parse_struct_body(CParse *p, StackElt *stack, int n_stack, char *struct_name)
+static void parse_struct_body(CParse *p, StackElt *stack, int n_stack, LocInfo *struct_loc)
 {
     StackElt *top = NULL;
     StackElt *first_vartype = 0;
@@ -812,8 +840,12 @@ static void parse_struct_body(CParse *p, StackElt *stack, int n_stack, char *str
             n_stack = n_stack_in;
             break;
         case ';':
-            if(first_vartype && first_vartype < top-1 && top[-1].tok == TOK) 
-                c_add_structref(p,top-1,first_vartype->l.str,struct_name);
+            if(first_vartype && first_vartype < top-1 && top[-1].tok == TOK)
+            {
+                c_add_structref(p,top-1,first_vartype->l.str,struct_loc->context);
+                c_add_structmbr(p,struct_loc,top-1,first_vartype);
+            }
+            
             n_stack = n_stack_in;
             break;
         case '{':
@@ -851,9 +883,9 @@ int c_parse(CParse *p)
         case '{':
             if(PREV_TOKS3(TYPEDEF,STRUCT, TOK)) // struct decl
             {
-                c_add_struct(p,top[-1].l.str,top[-1].lineno);
-                sprintf(ctxt,"struct %s",top[-1].l.str);
-                parse_struct_body(p,stack,n_stack,ctxt);
+                LocInfo *l;
+                l = c_add_struct(p,top[-1].l.str,top[-1].lineno);
+                parse_struct_body(p,stack,n_stack,l);
                 n_stack = 0;
             }
             else if(PREV_TOKS2(ENUM,TOK)) // struct decl
@@ -1259,14 +1291,14 @@ int c_parse_test()
     
 
     TEST(0==c_parse_file(&cp,"test/foo.c")); // todo: embed and write out if not existing.
-    c_on_processing_finished(&cp);
+    c_do_fixups(&cp);
 
 #define TEST_LI(TAG,REF,CTXT)     TEST(0==strcmp(li->tag,TAG)); \
     TEST(0==strcmp(li->referrer,REF));                          \
     TEST(0==strbeginswith(li->context,CTXT));                   \
     li++;
 
-#define TEST_L2(T,R,C) TEST(li->ref&&!strcmp(li->ref->tag,T));  \
+#define TEST_LR(T,R,C) TEST(li->ref&&!strcmp(li->ref->tag,R));  \
     TEST_LI(T,R,C);
 
     TEST(cp.structrefs.n_locs == 14);
@@ -1278,16 +1310,17 @@ int c_parse_test()
     TEST(li->lineno == start_line + 9);
     TEST_LI("bar_a",      "int",       "struct Bar");
     TEST_LI("baz_b",      "char",      "struct Bar");
-    TEST_L2("b",          "Foo",       "func test_func");
-    TEST_L2("c",          "Bar",       "func test_func");
-    TEST_L2("bar2",       "Foo",       "global var");
-    TEST_L2("hNameMsg",   "Message",  "struct Foo2");
-    TEST_L2("iSortID",    "U32",       "struct Foo2");
-    TEST_L2("bSearchable","bool",      "struct Foo2");
-    TEST_L2("eType",       "ItemType","struct Foo2");
-    TEST_L2("pBar",        "Bar",      "func test_func3");
-    TEST_L2("pBaz",        "Bar",      "func test_func3");
-    TEST_L2("foo",         "U32",      "func test_func3");
+    TEST_LR("a",          "int",       "func test_func");
+    TEST_LR("b",          "Foo",       "func test_func");
+    TEST_LR("c",          "Bar",       "func test_func");
+    TEST_LR("bar2",       "Foo",       "global var");
+    TEST_LI("hNameMsg",   "Message",  "struct Foo2");
+    TEST_LI("iSortID",    "U32",       "struct Foo2");
+    TEST_LI("bSearchable","bool",      "struct Foo2");
+    TEST_LI("eType",       "ItemType","struct Foo2");
+    TEST_LR("pBar",        "Bar",      "func test_func3");
+    TEST_LR("pBaz",        "Bar",      "func test_func3");
+    TEST_LI("foo",         "U32",      "func test_func3");
 
 
     // structs
@@ -1297,12 +1330,20 @@ int c_parse_test()
     TEST(li->referrer == NULL);
     TEST(0==strcmp(li->context,"struct Foo"));
     TEST(0==stricmp(li->file,"test/Foo.c"));
+    TEST(li->child && li->child->n_locs == 2);
+    li = li->child->locs;
+    TEST_LI("a", "int", "struct Foo");
+    TEST_LI("b", "char", "struct Foo");
     
     li = cp.structs.locs + 1;
     TEST(0==strcmp(li->tag,"Bar"));
     TEST(0==stricmp(li->file,"test/Foo.c"));
     TEST(0==strcmp(li->context,"struct Bar"));
-    
+    TEST(li->child && li->child->n_locs == 2);
+    li = li->child->locs;
+    TEST_LI("bar_a", "int",  "struct Bar");
+    TEST_LI("baz_b", "char", "struct Bar");
+
     li = cp.structs.locs + 2;
     TEST(0==strcmp(li->tag,"Baz"));
     TEST(0==strcmp(li->context,"enum Baz"));
@@ -1310,7 +1351,12 @@ int c_parse_test()
     li++;
     TEST(0==strcmp(li->tag,"Foo2"));
     TEST(0==strcmp(li->context,"struct Foo2"));
-
+    TEST(li->child && li->child->n_locs == 4);
+    li = li->child->locs;
+    TEST_LI("hNameMsg", "Message",  "struct Foo2");
+    TEST_LI("iSortID", "U32", "struct Foo2");
+    TEST_LI("bSearchable", "bool", "struct Foo2");
+    TEST_LI("eType", "ItemType", "struct Foo2");
     
     // func decls
     TEST(cp.funcs.n_locs >= 3);
@@ -1350,16 +1396,17 @@ int c_parse_test()
 
     li++;
     TEST(0==strcmp(li->tag,"strcmp"));
-    TEST(0==strcmp(li->referrer,"func test_func2"));
+    TEST(0==strcmp(li->referrer,"test_func2"));
 
     li++;
     TEST(0==strcmp(li->tag,"GET_REF"));
     TEST(0==strcmp(li->context ,"func test_func3"));
 
     n_lis = parse_locinfos_from_context(&cp.vars,"func test_func3",&lis);
-    TEST(n_lis == 7);
+    TEST(n_lis == 9);
     pli = lis;
     TEST(0==strcmp(pli[0]->context,"func test_func3"));
+    TEST(0==strcmp((*pli++)->tag,"pFoo"));
     TEST(0==strcmp((*pli++)->tag,"pFoo"));
     TEST(0==strcmp((*pli++)->tag,"hFoo"));
     TEST(0==strcmp((*pli++)->tag,"pDef"));
@@ -1368,6 +1415,10 @@ int c_parse_test()
     TEST(0==strcmp((*pli++)->tag,"pDef"));
     TEST(0==strcmp((*pli++)->tag,"bSellEnabled"));
     TEST(0==strcmp((*pli++)->tag,"eBar"));
+
+    TEST(cp.srcfiles.n_locs == 4);
+    li = cp.srcfiles.locs;
+    TEST(0==strcmp(li->tag,"test/foo.c"));
 
     // TODO: do a final lineno test
 

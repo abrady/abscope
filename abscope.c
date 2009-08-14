@@ -126,11 +126,11 @@ static int c_query_flags_from_str(char *a_in)
         case 'c':
             c_query_flags |= CQueryFlag_Srcfile;
             break;
-        case 'a':
-            c_query_flags = 0xffffffff;
-            break;
         case 'v':
             c_query_flags |= CQueryFlag_Vars;
+            break;
+        case 'a':
+            c_query_flags = 0xffffffff;
             break;
         default:
             fprintf(stderr, "unknown query option %c in %s\n",*a, a_in);

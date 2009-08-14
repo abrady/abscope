@@ -106,6 +106,7 @@ void scan_dir(DirScan *d, const char *adir, int recurse_dir,dirscan_fp add_file_
 
 #define stracpy(DST,SRC) (strncpy((DST),SRC,DIMOF(DST)),(DST)[DIMOF(DST)-1]=0,(DST))
 #define stricmp _stricmp
+#define stracat(DST,S) ((strlen(DST)+1<DIMOF(DST))?strcat(DST,S):DST)
 ABINLINE int strbeginswith(char *dest, char *src) {int n; if(!dest || !src) return FALSE; n = strlen(src); return strncmp(dest,src,n);}
 
 ABINLINE void str_replacechar(char *str, char from, char to) {char *t = str; for(;;) {t = strchr(t,from); if(!t) return; *t++ = to;}}
