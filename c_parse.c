@@ -194,8 +194,7 @@ int c_findsrcfile(CParse *cp, char *sn)
             for(j = 0; j<ps[i]->n_locs; ++j)
             {
                 LocInfo *li = ps[i]->locs + j;
-                char *fn = fname_nodir(li->file);
-                if(0 == stricmp(fn,sn) && !avltree_find(&t,li->file))
+                if(!avltree_find(&t,li->file))
                 {
                     avltree_insert(&t,li->file);
                     parse_add_locinfo(&cp->srcfiles,li->file,1,li->file,fname_nodir(li->file),li->file,0);
@@ -235,7 +234,7 @@ int c_query(CParse *cp, char *tag, int query_flags)
         res += c_findsrcfile(cp,tag);
     if(query_flags & CQueryFlag_Vars)
         res += c_findvars(cp,tag);
-    printf("QUERY_DONE)\n\n");
+    printf("(QUERY_DONE))\n\n");
     fflush(stdout);
     return res;
 }
@@ -339,6 +338,7 @@ typedef enum c_tokentype
     // cryptic src macros
     AST,
     AUTO_COMMAND,
+    EIGNORE,
 } c_tokentype;
 #define C_KWS_START TYPEDEF
 #define IS_INTRINSIC_TYPE(T) INRANGE(T,CHAR_TOK,DOUBLE+1)
@@ -996,7 +996,8 @@ static char const *ignored_kws[] =
     "ATH_ARG",
     "NN_PTR_GOOD",
     "const",
-    "volatile"
+    "volatile",
+    "EIGNORE"
 };
 
 

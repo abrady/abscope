@@ -214,12 +214,12 @@ void locinfo_print(LocInfo *li, char *in)
         in = "";
     
     printf("%s(LocInfo\n"
-              "%s\t(File    \"%s\")\n"
-              "%s\t(Lineno  \"%i\")\n"
-              "%s\t(Line    \"%s\")\n"
-              "%s\t(Tag     \"%s\")\n"  
-              "%s\t(RefName \"%s\")\n"
-              "%s\t(Ctxt    \"%s\")\n"
+              "%s\t(File    . \"%s\")\n"
+              "%s\t(Lineno  . \"%i\")\n"
+              "%s\t(Line    . \"%s\")\n"
+              "%s\t(Tag     . \"%s\")\n"  
+              "%s\t(RefName . \"%s\")\n"
+              "%s\t(Ctxt    . \"%s\")\n"
            ,in, in,li->file, in,li->lineno, in,li->line, in,li->tag, in,referrer, in,ctxt);
 //     if(li->ref)
 //     {
