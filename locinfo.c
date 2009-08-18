@@ -29,6 +29,7 @@ static void locinfo_cleanup(LocInfo *l)
 
 static ABINLINE int locinfo_write_eachfield(File *fp, LocInfo *l)
 {
+    int i;
     int res = 0;
     TIMER_START();
     res += string_binwrite(fp,l->tag);
@@ -37,13 +38,24 @@ static ABINLINE int locinfo_write_eachfield(File *fp, LocInfo *l)
     res += string_binwrite(fp,l->file);
     res += int_binwrite(fp,l->lineno);
     res += string_binwrite(fp,l->line);
+    if(l->child)
+    {
+        res += int_binwrite(fp,l->child->n_locs);
+        for(i = 0; i < l->child->n_locs; ++i)
+            locinfo_write_eachfield(fp,l->child->locs+i);
+    }
+    else
+        res += int_binwrite(fp,0);
+    
     TIMER_END(locinfo_write_timer);
     return res;
 }
 
 static ABINLINE int locinfo_read_eachfield(File *fp, LocInfo *l)
 {
+    int i;
     int res = 0;
+    int n = 0;
     TIMER_START();
     res += string_binread(fp,&l->tag);
     res += string_binread(fp,&l->referrer);
@@ -51,6 +63,13 @@ static ABINLINE int locinfo_read_eachfield(File *fp, LocInfo *l)
     res += string_binread(fp,&l->file);
     res += int_binread(fp,&l->lineno);
     res += string_binread(fp,&l->line);
+    res += int_binread(fp,&n);
+    if(n)
+    {
+        l->child = calloc(sizeof(*l->child),n);        
+        for(i = 0; i < n; ++i)
+            locinfo_read_eachfield(fp,l->child->locs + i);
+    }
     TIMER_END(locinfo_read_timer);
     return res;
 }

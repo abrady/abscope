@@ -84,7 +84,7 @@ Ctxt c"
   (with-current-buffer (process-buffer proc)
     (insert ":") ;; subtle notice of when the process finishes
     (save-excursion
-      ;; (goto-char (process-mark proc)) todo: proper mark saving.
+      (goto-char (process-mark proc)) todo: proper mark saving.
       (let
           (
            (forms)

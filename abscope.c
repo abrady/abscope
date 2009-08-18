@@ -126,11 +126,11 @@ static int c_query_flags_from_str(char *a_in)
         case 'c':
             c_query_flags |= CQueryFlag_Srcfile;
             break;
-        case 'a':
-            c_query_flags = 0xffffffff;
-            break;
         case 'v':
             c_query_flags |= CQueryFlag_Vars;
+            break;
+        case 'a':
+            c_query_flags = 0xffffffff;
             break;
         default:
             fprintf(stderr, "unknown query option %c in %s\n",*a, a_in);
@@ -280,7 +280,7 @@ int main(int argc, char **argv)
         {
             if(loop_query) // todo: should really use a proper lexer here.
             {
-                *query_buf = 0; *flag_buf = 0;
+                *query_buf = 0; *flag_buf = 0; *cmd_buf = 0;
                 // cmd type (only one at the moment, but hey)
                 if(1 != scanf_s("%s",SSTR(cmd_buf)) || 0 != strcmp("Query",cmd_buf))
                     continue;
