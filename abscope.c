@@ -265,6 +265,7 @@ int main(int argc, char **argv)
     
     if(query_str)
     {
+        char cmd_buf[32];
         char query_buf[1024];
         char flag_buf[32];
         if(0==strcmp(query_str,"-"))
@@ -277,9 +278,18 @@ int main(int argc, char **argv)
         
         do
         {
-            if(loop_query)
+            if(loop_query) // todo: should really use a proper lexer here.
             {
-                scanf_s("%s %s",flag_buf, DIMOF(flag_buf), query_buf, DIMOF(query_buf));
+                *query_buf = 0; *flag_buf = 0; *cmd_buf = 0;
+                // cmd type (only one at the moment, but hey)
+                if(1 != scanf_s("%s",SSTR(cmd_buf)) || 0 != strcmp("Query",cmd_buf))
+                    continue;
+                // cmd args
+                if(2 != scanf_s("%s %s",SSTR(flag_buf),SSTR(query_buf)))
+                    continue;
+                // end of command
+                if(1 == scanf_s("%s",SSTR(cmd_buf)) && 0 != strcmp(cmd_buf,"End"))
+                    continue;
                 c_query_flags = c_query_flags_from_str(flag_buf);
                 query_str = query_buf;
             }

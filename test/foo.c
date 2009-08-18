@@ -12,7 +12,7 @@ typedef struct Bar
 
 void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )
 {
-    int a;
+    int a = pEnt ? pEnt->n : 0;
     Foo b = {0};
     do
     {

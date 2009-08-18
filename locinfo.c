@@ -233,21 +233,21 @@ void locinfo_print(LocInfo *li, char *in)
         in = "";
     
     printf("%s(LocInfo\n"
-              "%s\t(File    \"%s\")\n"
-              "%s\t(Lineno  \"%i\")\n"
-              "%s\t(Line    \"%s\")\n"
-              "%s\t(Tag     \"%s\")\n"  
-              "%s\t(RefName \"%s\")\n"
-              "%s\t(Ctxt    \"%s\")\n"
+              "%s\t(File    . \"%s\")\n"
+              "%s\t(Lineno  . \"%i\")\n"
+              "%s\t(Line    . \"%s\")\n"
+              "%s\t(Tag     . \"%s\")\n"  
+              "%s\t(RefName . \"%s\")\n"
+              "%s\t(Ctxt    . \"%s\")\n"
            ,in, in,li->file, in,li->lineno, in,li->line, in,li->tag, in,referrer, in,ctxt);
-    if(li->ref)
-    {
-        char tmp[128];
-        printf("%s\t(Ref ",in);
-        sprintf_s(SSTR(tmp),"%s\t",in);
-        locinfo_print(li->ref,tmp);
-        printf("%s\t)\n", in);
-    }
+//     if(li->ref)
+//     {
+//         char tmp[128];
+//         printf("%s\t(Ref ",in);
+//         sprintf_s(SSTR(tmp),"%s\t",in);
+//         locinfo_print(li->ref,tmp);
+//         printf("%s\t)\n", in);
+//     }
     printf("%s)\n",in);
 }
 
@@ -278,6 +278,7 @@ static char* parse_find_add_str(Parse *p, char *s)
         r = _strdup(s); // strpool_find_add_str(&p->strs,s);
         p;
         str_replacechar(r,'\n',' ');
+        str_replacechar(r,'\"','\'');
     }
     TIMER_END(locinfo_parse_find_add_str_timer);
     return r;
@@ -351,7 +352,7 @@ int parse_print_search_tag(Parse *p,char *tag)
     {
         LocInfo *li = p->locs+i; 
 #define TAG_MATCH(T) (T && pcre_exec(re,NULL,T,strlen(T),0,0,matches,DIMOF(matches))>=0)
-        if(TAG_MATCH(li->tag) || TAG_MATCH(li->referrer))
+        if(TAG_MATCH(li->tag))// || TAG_MATCH(li->referrer))
         {
             res++;
             locinfo_print(li,NULL);

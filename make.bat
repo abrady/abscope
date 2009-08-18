@@ -6,7 +6,7 @@ call "c:/Microsoft Visual Studio 8/VC/bin/vcvars32.bat"
 :after_vcvars
 
 @call killall abscope.exe
-
+@call copy /Y abscope.exe abscope.exe.bak
 @IF /I "%1" == "OPT" set opt=Y
 @IF /I "%COMPUTERNAME%" EQU "abrady" set opt=Y
 @IF /I "%1" == "DBG" set opt=N

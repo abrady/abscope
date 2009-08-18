@@ -15,6 +15,8 @@
 #include "stdio.h"
 #include "stdlib.h"
 
+typedef struct StackElt StackElt;
+
 typedef struct CParse
 {
     Parse structs;
@@ -29,6 +31,10 @@ typedef struct CParse
     Parse srcfiles;
     
     // state info
+    StackElt *stack;
+    int m_stack;
+    int n_stack;
+
     File *fp;
     char *parse_file;
     int   parse_line;
