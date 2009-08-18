@@ -341,6 +341,12 @@ stag:")
   "jump srcfile"
   (interactive (list (read-string "srcfile:" (readWordOrRegion))))
   (abscope-jump tag "c"))
+
+(defun abjd (tag)
+  "jump #define"
+  (interactive (list (read-string "define:" (readWordOrRegion))))
+  (abscope-jump tag "d"))
+          
           
          
 (provide 'abscope)
