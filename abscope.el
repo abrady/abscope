@@ -347,6 +347,33 @@ stag:")
   (interactive (list (read-string "define:" (readWordOrRegion))))
   (abscope-jump tag "d"))
           
+(defun abscope-insert(tag flags)
+  (interactive (list (read-string "tag:" (readWordOrRegion))
+               (read-string "flags (s)truct (f)unc:" "a" 'abscope-find-members-history)))
+  (interactive)
+  (let
+      (
+       (li)
+       (loc)
+       (lis)
+       )
+    (save-window-excursion
+      (setq abscope-last-output nil)
+      (abscope-query flags tag) ;; this logs the history as well as provides the info
+      (loop for i from 1 to 1000 until abscope-last-output 
+            do (accept-process-output abscope-proc 0.1 0 t)
+            )
+      (if (not abscope-last-output) 
+          (error "no info for type %s" vartype))      
+      (setq lis (loop for i in abscope-last-output
+                      if (eq (car i) 'LocInfo) collect (cons (cdr (assoc 'Tag (cdr i))) (cdr i))))
+      (setq li (completing-read "insert:" lis nil t (caar lis) 'abscope-find-members-history nil nil))
+      (if (not li)
+          (error "no location chosen"))
+      )
+    (insert li)
+    )
+  )
           
          
 (provide 'abscope)

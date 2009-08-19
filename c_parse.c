@@ -526,7 +526,7 @@ static ABINLINE void parse_to_chars(CParse *p, char *toks)
                 goto done;
     }
 done:
-    reduce_to(p,n_stack_in+1,top);
+    reduce_to(p,n_stack_in,top);
 }
 
 
@@ -547,41 +547,10 @@ static ABINLINE void parse_to_tok(CParse *p, int tok, int open_tok)
         if(top->tok == open_tok)
             n_open++;
         else if(top->tok == tok)
-            n_open--;
+            n_open--;        
+        POP_TO(n_stack_in);
     }
-    POP_TO(n_stack_in);
 }
-
-static void parse_enum_body(CParse *p, char *enum_typename)
-{
-    StackElt *top = NULL;
-    int n_stack_in = p->n_stack;
-    for(;;)
-    {
-        NEXT_TOK();
-        
-        if(top->tok == '}')
-            break;
-        
-        switch(top->tok)
-        {
-        case TOK:
-            c_add_enum(p,top->l.str,enum_typename,top->lineno);
-            parse_to_chars(p,",}");
-            break;
-        case ',':
-            break;
-        default:
-            parse_to_tok(p,'}',0); // something's wrong
-            goto done;
-        }
-    }
-done:
-    POP_TO(n_stack_in);
-}
-
-// 
-//static void extract_vars(CParse *p, StackElt *s, StackElt *e)
 
 // expressions:
 // assignment expression
@@ -610,16 +579,21 @@ static void parse_expr(CParse *p, char *ctxt, char terminating_tok, char termina
         case ')':
             POP_TO(n_stack_in);
             break;
+        case '}':
+            POP_TO(n_stack_in);
+            break;
         case TOK: // keep this around
         {
             char *ref = NULL;
-            int tok = top[-1].tok;
-            if((tok == PTR_OP || tok == '.') && top[-2].tok == TOK)
-                ref = top[-2].l.str;
-            c_add_var(p,top,ref,ctxt);
+            if(top[-1].tok == PTR_OP || top[-1].tok == '.' && *top[-1].l.str)      // a.b or a->b
+                ref = top[-1].l.str;
+            c_add_var(p,top,ref,ctxt);  // add b w/ref to a
         }
         break;
         case PTR_OP:
+        case '.':
+            if(top[-1].tok == TOK)      // a. or a->
+                stracpy(top->l.str, top[-1].l.str);
             break;
         case '?':
             // parse ? to : then keep going
@@ -633,6 +607,61 @@ static void parse_expr(CParse *p, char *ctxt, char terminating_tok, char termina
     }
     reduce_to(p,n_stack_in,top);
 }
+
+
+static void parse_enum_body(CParse *p, char *enum_typename)
+{
+    StackElt *top = NULL;
+    int n_stack_in = p->n_stack;
+    for(;;)
+    {
+        NEXT_TOK();
+        
+        switch(top->tok)
+        {
+        case '}': 
+        case ',':
+            if(top[-1].tok == TOK)
+                c_add_enum(p,top[-1].l.str,enum_typename,top[-1].lineno);
+            if(top->tok == '}')
+                goto done;
+            POP_TO(n_stack_in);
+            break;
+        case '=':
+            parse_expr(p,enum_typename,',','}');
+            break;
+        }
+    }
+done:
+    POP_TO(n_stack_in);
+}
+
+// 
+//static void extract_vars(CParse *p, StackElt *s, StackElt *e)
+
+static void parse_initializer(CParse *p, char *ctxt)
+{
+    StackElt *top = NULL;
+    int n_stack_in = p->n_stack;
+    for(;;)
+    {
+        NEXT_TOK();        
+        if(top->tok == ';' || top->tok == ',')
+            break;
+        switch(top->tok)
+        {
+        case '{':
+            parse_to_tok(p,'}','{');
+            POP_TO(n_stack_in);
+            break;
+        default:
+            unget_tok(p);
+            parse_expr(p,ctxt,',',';');
+        };
+    }
+    reduce_to(p,n_stack_in,top);
+}
+
 
 static void parse_arglist(CParse *p, char *ctxt)
 {
@@ -667,6 +696,7 @@ static void parse_arglist(CParse *p, char *ctxt)
 static void parse_var_decls(CParse *p, char *ctxt)
 {
     StackElt *last_vartype = NULL;
+    StackElt *last_tok = NULL;
     StackElt *top = NULL;
     int n_stack_in = p->n_stack;
     for(;;)
@@ -687,16 +717,17 @@ static void parse_var_decls(CParse *p, char *ctxt)
         case TOK:
             if(!last_vartype)
                 last_vartype = top;
+            last_tok = top;
             break;
         case '=':
-            parse_expr(p,ctxt,',',';');
+            parse_initializer(p,ctxt);
             break;
         case ',':                       // fall thru
         case ';': 
-            if(top == last_vartype)
-                goto done; // might be single stmt: foo; 
-            if(last_vartype)
-                c_add_structref(p,top-1,last_vartype->l.str,ctxt);
+            if(last_tok == last_vartype) // use last_tok as Foo a[]; is valid
+                goto done; // might be single stmt: foo; or ;
+            if(last_vartype && last_tok)
+                c_add_structref(p,last_tok,last_vartype->l.str,ctxt);
 
             if(top->tok == ';')
             {
@@ -708,6 +739,7 @@ static void parse_var_decls(CParse *p, char *ctxt)
         case '(':
             if(!last_vartype || last_vartype == top-1) 
                 goto done; // just a function call or some error
+            break;
         case '*':
             // todo: count derefs
 //             if(last_vartype)
@@ -746,7 +778,7 @@ static void parse_func_body(CParse *p, char *func_ctxt)
             parse_expr(p,func_ctxt,')',0);
             if(top[-1].tok == TOK)
                 c_add_funcref(p,top-1,func_ctxt);
-            POP_TO(p->n_stack-2);
+            POP_TO(n_stack_in);
             break;
         case '=':
             unget_tok_to(p,n_stack_in);
@@ -888,9 +920,11 @@ int c_parse(CParse *p)
             break;
         case POUND_DEFINE:
             c_add_define(p,top->l.str, top->lineno);
+            POP_TO(0);
             break;
         case POUND_INCLUDE:
             // need to fix c_lex to get the string for this
+            POP_TO(0);
             break;
         default:
             break;
@@ -1217,6 +1251,7 @@ BOOL dirscan_accept_c_files(char *path, char **ctxt)
 int c_parse_test()
 {
     CParse cp = {0};
+    CParse cp2 = {0};
     LocInfo *li;
     LocInfo *li_end;
     LocInfo **pli;
@@ -1237,7 +1272,10 @@ int c_parse_test()
     // parse a test file
     
 
-    TEST(0==c_parse_file(&cp,"test/foo.c")); // todo: embed and write out if not existing.
+    TEST(0==c_parse_file(&cp2,"test/bar.c")); // scratch test environment for easy debugging. foo.c is where solid tests go
+    c_do_fixups(&cp2);
+
+    TEST(0==c_parse_file(&cp,"test/foo.c"));
     c_do_fixups(&cp);
 
 #define INIT_LI(p) { LocInfo *l = p.locs; int n = p.n_locs; li = p.locs; li_end = l + n; }
@@ -1251,11 +1289,11 @@ int c_parse_test()
 #define TEST_LR(T,R,C) TEST(li < li_end); TEST(li->ref&&!strcmp(li->ref->tag,R)); TEST_LI(T,R,C);
 
     INIT_LI(cp.structrefs);
-    TEST(li->lineno == start_line + 3);
+    start_line = li->lineno;
     TEST_LI("a",          "int",       "struct Foo");
-    TEST(li->lineno == start_line + 4);
+    TEST(li->lineno == start_line + 1);
     TEST_LI("b",          "char",      "struct Foo");
-    TEST(li->lineno == start_line + 9);
+    TEST(li->lineno == start_line + 6);
     TEST_LI("bar_a",      "int",       "struct Bar");
     TEST_LI("baz_b",      "char",      "struct Bar");
     TEST_LI("a",          "int",       "func test_func");

@@ -66,7 +66,9 @@ static ABINLINE int locinfo_read_eachfield(File *fp, LocInfo *l)
     res += int_binread(fp,&n);
     if(n)
     {
-        l->child = calloc(sizeof(*l->child),n);        
+        l->child  = calloc(sizeof(*l->child),1);        
+        l->child->locs   = calloc(sizeof(*l->child->locs),n);
+        l->child->n_locs = n;
         for(i = 0; i < n; ++i)
             locinfo_read_eachfield(fp,l->child->locs + i);
     }
