@@ -4,23 +4,57 @@
 ;; - local vars command => completing read
 ;; - function params
 ;; - list of files in project for auto complete
+;; - string pool
+;; - shrink footprint.
 
-(setq abscope-dir "c:/src")
 (setq abscope-file "abscope-queries.org")
 (setq abscope-exe "c:/abs/abscope/abscope.exe")
-(setq abscope-proc nil)
-(setq abscope-tq nil)
+
+;;(setq abscope-dir "c:/src")
+(defvar abscope-process nil "the process for each project")
+(defvar abscope-tq     nil "the command-response queue for each process")
+(make-variable-buffer-local 'abscope-tq)
+(make-variable-buffer-local 'abscope-process)
+
+(defun abscope-file ()
+  "get the buffer for abscope given the context"
+  (let
+      ((bn default-directory))
+    (if (string-match "\\(c:/src.*?\\)/" bn)
+          (find-file-noselect (concat (match-string 1 bn) "/" abscope-file ))
+      (find-file-noselect (concat "c:/src/" abscope-file)))))
+
+(defun abscope-proc ()
+  "get the abscope process for a given project"
+  (with-current-buffer (abscope-file)
+    abscope-process))
 
 (defun abscope-re-launch ()
   "launch/re-launch the exe"
-  (if (not (and abscope-proc (equal (process-status abscope-proc) 'run)))
-      (save-window-excursion
-        (find-file (concat abscope-dir "/" abscope-file))
-        (setq abscope-proc (start-process "abscope" (current-buffer) abscope-exe "-Qa" "-"))
-        (setq abscope-tq (tq-create abscope-proc))
-        )
+  (with-current-buffer (abscope-file)
+    (if (not (and abscope-process (equal (process-status abscope-process) 'run)))
+        (save-window-excursion
+          (setq abscope-process (start-process "abscope" (current-buffer) abscope-exe "-Qa" "-"))
+          (setq abscope-tq (tq-create abscope-process))
+          )
+      )
     )
 )
+
+(defun abscope-init (project-dir)
+  "fire up abscope for a given directory"
+  (interactive "D project dir:")
+  (save-window-excursion
+    (with-current-buffer (find-file-noselect project-dir)
+      (abscope-re-launch))))
+    
+
+(defun abscope-kill ()
+  "kill abscope process in current project"
+  (interactive)
+  (with-current-buffer (abscope-file)
+    (kill-process abscope-proc)))
+
 
 ;; (abs-print-locinfo (cdar foo) "**")
 (defvar abscope-last-output nil
@@ -29,7 +63,11 @@
 (defvar abscope-last-output-str nil
   "string last returned by abscope")
 
-(defun abscope-proc-eval-output (proc str)
+(make-variable-buffer-local 'abscope-last-output)
+(make-variable-buffer-local 'abscope-last-output-str)
+
+(defun abs-proc-eval-output (proc str)
+  "helper for reading and evaluating any exprs in the output"
   (setq abscope-last-output (eval (read str)))
   )
 
@@ -82,9 +120,9 @@ Ctxt c"
 
 (defun abscope-proc-print-output (proc str) 
   (with-current-buffer (process-buffer proc)
-    (insert ":") ;; subtle notice of when the process finishes
     (save-excursion
-      (goto-char (process-mark proc)) todo: proper mark saving.
+      (goto-char (process-mark proc)) ;; todo: proper mark saving.
+      (insert ":") ;; subtle notice of when the process finishes
       (let
           (
            (forms)
@@ -92,7 +130,7 @@ Ctxt c"
         (setq abscope-last-output-str str)
         (condition-case err
             (progn
-              (setq forms (abscope-proc-eval-output proc str))
+              (setq forms (abs-proc-eval-output proc str))
               (loop for i in forms do
                     (case (car i)
                       ('LocInfo (abs-print-locinfo (cdr i) "**"))
@@ -108,15 +146,36 @@ Ctxt c"
     )
   )
 
-(defun abscope-query-data (type tag process-defun)
-  (abscope-re-launch)
-  (if (equal type "") (setq type "a"))
-  (if (equal tag "") (error "invalid (empty) tag"))
-  (tq-enqueue abscope-tq (concat "Query " type " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-proc process-defun)
+(defun abs-proc-wait-once ()
+  "stall for just a short period to try to get the output
+*seems* to be more responsive if you do this"
+  (with-current-buffer (abscope-file)
+    ;; 
+    (accept-process-output abscope-process 0.1 0 1)))
 
-  ;; *seems* to be more responsive if you do this
-  (accept-process-output abscope-proc 0.1 0 1) 
-  (tq-process-buffer abscope-tq)
+(defun abs-proc-wait-until-done ()
+  (with-current-buffer (abscope-file)
+    (loop for i from 1 to 1000 until abscope-last-output 
+          do (abs-proc-wait-once)
+          )
+    )
+  )
+
+(defun abscope-query-data (type tag process-defun)
+  (with-current-buffer (abscope-file)
+    (abscope-re-launch)
+    (if (equal type "") (setq type "a"))
+    (if (equal tag "") (error "invalid (empty) tag"))
+
+    (end-of-buffer)
+    (insert "\n\n* " tag)
+    (push-mark (point))
+    (set-marker (process-mark abscope-process) (point))
+
+    (tq-enqueue abscope-tq (concat "Query " type " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process process-defun)
+    (abs-proc-wait-once)
+    (tq-process-buffer abscope-tq)
+    )
 )
 
 (defun abscope-query (type tag)
@@ -131,16 +190,7 @@ Ctxt c"
 "
   (interactive "s (s)truct (S)tructref (f)unc (F)uncref:
 stag:")
-  (if (find-buffer-visiting (concat abscope-dir"/" abscope-file))
-      (iswitchb-visit-buffer (find-buffer-visiting (concat abscope-dir"/" abscope-file)))
-    (progn
-      (find-file-other-window abscope-dir)
-      (find-file (concat abscope-dir "/" abscope-file))
-      ))
-  
-  (end-of-buffer)
-  (insert "\n\n* " tag)
-  (push-mark (point))
+  (iswitchb-visit-buffer (abscope-file))
   (abscope-query-data type tag 'abscope-proc-print-output)
   )
 
@@ -158,12 +208,12 @@ stag:")
   )
 (defun abqf (tag)
   "find a function def"
-  (interactive (list (read-string "src file to search for:" (readWordOrRegion))))
+  (interactive (list (read-string "func to search for:" (readWordOrRegion))))
   (abscope-query "f" tag)
   )
 (defun abqs (tag)
   "find a struct def"
-  (interactive (list (read-string "src file to search for:" (readWordOrRegion))))
+  (interactive (list (read-string "struct to search for:" (readWordOrRegion))))
   (abscope-query "s" tag)
   )
 
@@ -185,7 +235,7 @@ stag:")
   (interactive)
   (let
       ((buf))
-    (find-file (concat abscope-dir "/" abscope-file))
+    (find-file (abscope-file))
 
     (setq buf (save-window-excursion
                       (org-open-at-point)
@@ -201,7 +251,7 @@ stag:")
   (interactive)
   (let
       ((buf))
-    (find-file (concat abscope-dir "/" abscope-file))
+    (find-file (abscope-file))
     (forward-line -1)
     (setq buf (save-window-excursion
                       (org-open-at-point)
@@ -216,16 +266,6 @@ stag:")
   (while t 
     (abscope-next-match)
     (call-interactively 'query-replace-regexp)))
-
-(defun abscope-follow-tag (tag)
-  "try to find an existing tag from the word at point"
-  (interactive (list (read-string "tag:" (readWordOrRegion)))) 
-  (find-file (concat abscope-dir "/" abscope-file))
-  (end-of-buffer)
-  (if (re-search-backward (format "^\\* %s" tag) nil t)
-      (abscope-next-match)
-    (abq tag)))
-
 
 (defun abscope-find-var-type (varname)
   "int a; ... should return int"
@@ -272,11 +312,8 @@ stag:")
         )
       (setq vartype (concat "\\b" vartype "\\b"))
       (setq abscope-last-output nil)
-      (abscope-query-data "s" vartype 'abscope-proc-eval-output)
-      (loop for i from 1 to 1000 until abscope-last-output 
-            do (accept-process-output abscope-proc 0.1 0 t)
-            )
-      (if (not abscope-last-output)
+      (abscope-query-data "s" vartype 'abs-proc-eval-output)
+(abs-proc-wait-until-done)      (if (not abscope-last-output)
           (error "no info for type %s" vartype))
       
       (if (equal (car abscope-last-output) '(QUERY_DONE))
@@ -303,19 +340,18 @@ stag:")
        (lis)
        )
     (save-window-excursion
-      (setq abscope-last-output nil)
-      (abscope-query flags tag) ;; this logs the history as well as provides the info
-      (loop for i from 1 to 1000 until abscope-last-output 
-            do (accept-process-output abscope-proc 0.1 0 t)
-            )
-      (if (not abscope-last-output) 
-          (error "no info for type %s" vartype))      
-      (setq lis (loop for i in abscope-last-output
-                      if (eq (car i) 'LocInfo) collect (cons (cdr (assoc 'Tag (cdr i))) (cdr i))))
-      (setq li (completing-read "jump to:" lis nil t tag 'abscope-find-members-history nil nil))
-      (if (not li)
-          (error "no location chosen"))
-      (setq loc (assoc li lis))
+      (with-current-buffer (abscope-file)
+        (setq abscope-last-output nil)
+        (abscope-query flags tag) ;; this logs the history as well as provides the info
+        (abs-proc-wait-until-done)      (if (not abscope-last-output) 
+                                            (error "no info for type %s" vartype))      
+        (setq lis (loop for i in abscope-last-output
+                        if (eq (car i) 'LocInfo) collect (cons (cdr (assoc 'Tag (cdr i))) (cdr i))))
+        (setq li (completing-read "jump to:" lis nil t tag 'abscope-find-members-history nil nil))
+        (if (not li)
+            (error "no location chosen"))
+        (setq loc (assoc li lis))
+        )
       )
     (if (not loc)
         (error "no location found"))
@@ -349,7 +385,7 @@ stag:")
           
 (defun abscope-insert(tag flags)
   (interactive (list (read-string "tag:" (readWordOrRegion))
-               (read-string "flags (s)truct (f)unc:" "a" 'abscope-find-members-history)))
+                     (read-string "flags (s)truct (f)unc:" "a" 'abscope-find-members-history)))
   (interactive)
   (let
       (
@@ -358,22 +394,21 @@ stag:")
        (lis)
        )
     (save-window-excursion
-      (setq abscope-last-output nil)
-      (abscope-query flags tag) ;; this logs the history as well as provides the info
-      (loop for i from 1 to 1000 until abscope-last-output 
-            do (accept-process-output abscope-proc 0.1 0 t)
-            )
-      (if (not abscope-last-output) 
-          (error "no info for type %s" vartype))      
-      (setq lis (loop for i in abscope-last-output
-                      if (eq (car i) 'LocInfo) collect (cons (cdr (assoc 'Tag (cdr i))) (cdr i))))
-      (setq li (completing-read "insert:" lis nil t (caar lis) 'abscope-find-members-history nil nil))
-      (if (not li)
-          (error "no location chosen"))
+      (with-current-buffer (abscope-file)
+        (setq abscope-last-output nil)
+        (abscope-query flags tag) ;; this logs the history as well as provides the info
+        (abs-proc-wait-until-done)
+        (if (not abscope-last-output) 
+            (error "no info for type %s" vartype))      
+        (setq lis (loop for i in abscope-last-output
+                        if (eq (car i) 'LocInfo) collect (cons (cdr (assoc 'Tag (cdr i))) (cdr i))))
+        (setq li (completing-read "insert:" lis nil t (caar lis) 'abscope-find-members-history nil nil))
+        (if (not li)
+            (error "no location chosen"))
+        )
       )
     (insert li)
     )
   )
-          
          
 (provide 'abscope)
