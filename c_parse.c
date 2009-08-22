@@ -6,8 +6,6 @@
  * todo:
  * - build a call tree
  * - logging
- * - add 'files', 'func decls'
- * - 'reward_CalculateKillCredit' doesn't parse properly : lex 0.f as a float number
  ***************************************************************************/
 #include "c_parse.h"
 #include "abhash.h"
@@ -133,6 +131,9 @@ int c_on_processing_finished(CParse *cp)
     printf("%i srcfiles\n",cp->srcfiles.n_locs);
     res += absfile_write_parse("c_srcfiles.abs",&cp->srcfiles);
 
+    printf("%i cryptic\n",cp->cryptic.n_locs);
+    res += absfile_write_parse("c_cryptic.abs",&cp->cryptic);
+
     return res;
 }
 
@@ -155,6 +156,8 @@ int c_load(CParse *cp)
         res += absfile_read_parse("c_vars.abs",&cp->vars);
     if(file_exists("c_srcfiles.abs"))
         res += absfile_read_parse("c_srcfiles.abs",&cp->srcfiles);
+    if(file_exists("c_cryptic.abs"))
+        res += absfile_read_parse("c_cryptic.abs",&cp->cryptic);
     c_do_fixups(cp);
     return res;
 }
@@ -202,6 +205,11 @@ int c_findvars(CParse *cp, char *sn)
     return parse_print_search_tag(&cp->vars,sn);
 }
 
+int c_findcryptic(CParse *cp, char *sn)
+{
+    return parse_print_search_tag(&cp->cryptic,sn);
+}
+
 
 int c_query(CParse *cp, char *tag, int query_flags)
 {
@@ -223,6 +231,8 @@ int c_query(CParse *cp, char *tag, int query_flags)
         res += c_findsrcfiles(cp,tag);
     if(query_flags & CQueryFlag_Vars)
         res += c_findvars(cp,tag);
+    if(query_flags & CQueryFlag_cryptic)
+        res += c_findcryptic(cp,tag);
     printf("(QUERY_DONE))\n\n");
     fflush(stdout);
     return res;
@@ -326,7 +336,17 @@ typedef enum c_tokentype
 
     // cryptic src macros
     AST,
-    AUTO_COMMAND,
+    REDUCED_CRYPTIC_AUTO,
+    AUTO_COMMAND,   // ACMD_NAME(foo)
+    AUTO_COMMAND_REMOTE,
+    AUTO_COMMAND_REMOTE_SLOW,
+    AUTO_COMMAND_QUEUED,
+    AUTO_CMD_INT,    // (var,cmd_name)
+    AUTO_CMD_FLOAT,  // (var,cmd_name)
+    AUTO_CMD_STRING, // (var,cmd_name)
+    AUTO_CMD_SENTENCE,
+    AUTO_EXPR_FUNC,  // (UIGen) ACMD_NAME(foo)
+    ACMD_NAME,       // (foo)
     EIGNORE,
 } c_tokentype;
 #define C_KWS_START TYPEDEF
@@ -340,6 +360,12 @@ typedef enum c_tokentype
 #define PREV_TOK(A) ((p->n_stack >= 2) && top[-1].tok == A)
 #define PREV_TOKS2(A,B) ((p->n_stack >= 3) && top[-2].tok == A && top[-1].tok == B)
 #define PREV_TOKS3(A,B,C) ((p->n_stack >= 4) && top[-3].tok == A && top[-2].tok == B && top[-1].tok == C)
+
+#define POP() {                                 \
+        assert(p->n_stack > 0);                 \
+        p->n_stack--;                           \
+    }
+
 
 #define POP_TO(N) {                             \
         assert(INRANGE0(N,p->n_stack+1));       \
@@ -435,6 +461,20 @@ static void c_add_var(CParse *p, StackElt *elt, char *ref, char *func_ctxt)
 {
     parse_add_locinfo(&p->vars,p->parse_file,elt->lineno,p->line,elt->l.str,ref,func_ctxt);
 }
+
+// usually for an AUTO_... function
+static void c_add_cryptic(CParse *p, StackElt *elt, char *ref)
+{
+    char buf[sizeof(elt->l.str)];
+    char *tmp;
+    // a little hacky, but split the line and tag up.
+    stracpy(buf,elt->l.str);
+    tmp = strchr(buf,':');
+    if(tmp)
+        *tmp++ = 0;
+    parse_add_locinfo(&p->cryptic,p->parse_file,elt->lineno,p->line,buf,ref,tmp);
+}
+
 
 int c_debug;
 int c_lex(CParse *p, StackElt *top);
@@ -842,6 +882,48 @@ static void parse_struct_body(CParse *p, LocInfo *struct_loc)
     POP_TO(n_stack_in);
 }
 
+static void parse_cryptic_auto_decl(CParse *p)
+{
+    StackElt *top = NULL;
+    int n_stack_in = p->n_stack;
+    char *res = NULL;
+    
+    for(;;)
+    {
+        NEXT_TOK();        
+        if(top->tok == ';')
+        {
+            str_catf(&res,":%s",p->line);
+            break;
+        }
+        
+        switch(top->tok)
+        {
+        case ')':
+            if(p->n_stack - n_stack_in < 3)
+                break;
+            if(!PREV_TOKS3(ACMD_NAME,'(',STR))
+                break;
+            str_cat(&res,top[-1].l.str);
+            break;
+        default:
+        break;
+        }
+    }
+
+    if(top)
+    {
+        top->tok = REDUCED_CRYPTIC_AUTO;
+        if(res)
+        {
+            stracpy(top->l.str,res);
+            free(res);
+        }    
+        reduce_to(p,n_stack_in,top);
+    }
+}
+
+
 
 int c_parse(CParse *p)
 {
@@ -879,7 +961,6 @@ int c_parse(CParse *p)
             else if(PREV_TOK(FUNC_HEADER)) // function def
             {
                 char *func_name = top[-1].l.str;
-
                 c_add_funcdef(p,top[-1].lineno,func_name,p->last_line);
                 sprintf(ctxt,"func %s",func_name);
                 parse_func_body(p,ctxt);
@@ -888,30 +969,44 @@ int c_parse(CParse *p)
 
             break;
         case '(':
-            if(PREV_TOK(TOK)) // function decl/def
+            if(p->n_stack <= 1)
+                break;
+            switch (top[-1].tok)
+            {
+            case TOK: // func call
             {
                 StackElt hdr = {0};
-                // don't care about args yet
-                //parse_arglist(p,stack,n_stack);
-                parse_to_tok(p,')','(');
+                char *func_name = top[-1].l.str;
+                
+                if(p->stack[0].tok==REDUCED_CRYPTIC_AUTO)
+                    c_add_cryptic(p,p->stack+0,func_name);
 
+                parse_arglist(p,func_name);
+
+                // reduce to func header
                 hdr.tok = FUNC_HEADER;
                 hdr.lineno = top->lineno;
                 strcpy(hdr.l.str,top[-1].l.str);
-
                 ZeroStruct(&stack[0]);
                 stack[0] = hdr;
                 POP_TO(1);
             }
-            else
-            {
+            break;
+            default:
                 parse_to_tok(p,')','(');
                 POP_TO(0); // dunno what this is
+                break;
             }            
             break;
         case ';':
             if(stack[0].tok == TOK) // global variable
                 c_add_structref(p,top-1,stack[0].l.str,"global var");
+            else if(top[-1].tok == REDUCED_CRYPTIC_AUTO)
+            {
+                POP(); // special case: just discard this
+                break; // this tag may be used for the next func def
+            }
+            
             POP_TO(0);
             break;
         case '=':
@@ -926,6 +1021,13 @@ int c_parse(CParse *p)
             // need to fix c_lex to get the string for this
             POP_TO(0);
             break;
+        case AUTO_COMMAND:
+        case AUTO_COMMAND_REMOTE:
+        case AUTO_COMMAND_REMOTE_SLOW:
+        case AUTO_COMMAND_QUEUED:
+        case AUTO_EXPR_FUNC:
+            parse_cryptic_auto_decl(p);
+            break;
         default:
             break;
         };
@@ -938,42 +1040,51 @@ typedef struct KwTokPair { char *kw; int tok; } KwTokPair;
 typedef struct OpTokPair { char kw[4]; int tok;} OpTokPair;    
 static const KwTokPair kws[] = 
 {
-    { "AUTO_COMMAND",      AUTO_COMMAND },
-//        { "NOCONST",           NOCONST_DECL },
-//        { "const",             CONST_DECL },
-    { "typedef", TYPEDEF },
-    { "extern", EXTERN },
-    { "static", STATIC },
-    { "auto", AUTO },
-    { "register", REGISTER },
-    { "char", CHAR_TOK },
-    { "short", SHORT_TOK },
-    { "int", INT_TOK },
-    { "long", LONG_TOK },
-    { "signed", SIGNED },
-    { "unsigned", UNSIGNED },
-    { "float", FLOAT_TOK },
-    { "double", DOUBLE },
-//        { "const", CONST },
-//        { "volatile", VOLATILE }, ignored, see ignored_kws
-    { "void", VOID_TOK },
-    { "struct", STRUCT },
-    { "union", UNION },
-    { "enum", ENUM },
-    { "case", CASE },
-    { "default", DEFAULT },
-    { "if", IF },
-    { "else", ELSE },
-    { "switch", SWITCH },
-    { "while", WHILE },
-    { "do", DO },
-    { "for", FOR },
-    { "goto", GOTO },
-    { "continue", CONTINUE },
-    { "break", BREAK },
-    { "return", RETURN },
-    { "sizeof", SIZEOF },
-    { "AST", AST},
+    { "AUTO_COMMAND",             AUTO_COMMAND },
+//        { "NOCONST",            NOCONST_DECL },
+//        { "const",              CONST_DECL },
+    { "AUTO_COMMAND_REMOTE",      AUTO_COMMAND_REMOTE },
+    { "AUTO_COMMAND_REMOTE_SLOW", AUTO_COMMAND_REMOTE_SLOW },
+    { "AUTO_COMMAND_QUEUED",      AUTO_COMMAND_QUEUED },
+    { "AUTO_CMD_INT",             AUTO_CMD_INT },
+    { "AUTO_CMD_FLOAT",           AUTO_CMD_FLOAT },
+    { "AUTO_CMD_STRING",          AUTO_CMD_STRING },
+    { "AUTO_CMD_SENTENCE",        AUTO_CMD_SENTENCE },
+    { "AUTO_EXPR_FUNC",           AUTO_EXPR_FUNC },
+    { "ACMD_NAME",                ACMD_NAME },
+    { "typedef",                  TYPEDEF },
+    { "extern",                   EXTERN },
+    { "static",                   STATIC },
+    { "auto",                     AUTO },
+    { "register",                 REGISTER },
+    { "char",                     CHAR_TOK },
+    { "short",                    SHORT_TOK },
+    { "int",                      INT_TOK },
+    { "long",                     LONG_TOK },
+    { "signed",                   SIGNED },
+    { "unsigned",                 UNSIGNED },
+    { "float",                    FLOAT_TOK },
+    { "double",                   DOUBLE },
+//        { "const",              CONST },
+//        { "volatile",           VOLATILE }, ignored, see ignored_kws
+    { "void",                     VOID_TOK },
+    { "struct",                   STRUCT },
+    { "union",                    UNION },
+    { "enum",                     ENUM },
+    { "case",                     CASE },
+    { "default",                  DEFAULT },
+    { "if",                       IF },
+    { "else",                     ELSE },
+    { "switch",                   SWITCH },
+    { "while",                    WHILE },
+    { "do",                       DO },
+    { "for",                      FOR },
+    { "goto",                     GOTO },
+    { "continue",                 CONTINUE },
+    { "break",                    BREAK },
+    { "return",                   RETURN },
+    { "sizeof",                   SIZEOF },
+    { "AST",                      AST},
 };
 
 static const OpTokPair ops[] = 
@@ -1390,6 +1501,13 @@ int c_parse_test()
     li++;
     TEST(0==strcmp(li->tag,"GET_REF"));
     TEST(0==strcmp(li->context ,"func test_func3"));
+
+    INIT_LI(cp.cryptic);
+    TEST_LI("Acmd", "exprAcmd", "AUTO_EXPR_FUNC(UIGen) ACMD_NAME('Acmd');");
+    TEST(li == li_end);    
+
+    // ----------
+    // queries
 
     n_lis = parse_locinfos_from_context(&cp.vars,"func test_func3",&lis);
     TEST(n_lis == 12);

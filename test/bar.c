@@ -1,3 +1,4 @@
+AUTO_EXPR_FUNC(UIGen) ACMD_NAME("InitMenus");
 void wleMenuInitMenus(void)
 {
 	EMMenuItemDef wleMenuItems[] =

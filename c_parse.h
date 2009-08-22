@@ -29,6 +29,7 @@ typedef struct CParse
     Parse enums;
     Parse vars;
     Parse srcfiles;
+    Parse cryptic;
     
     // state info
     StackElt *stack;
@@ -66,15 +67,16 @@ int c_load(CParse *cp);
 
 typedef enum CQueryFlag
 {
-    CQueryFlag_None       = 0,    // search for Foo matches:
-    CQueryFlag_Structs    = 1<<1, // struct Foo {}; enum Foo {}; 
-    CQueryFlag_Structrefs = 1<<2, // Foo a;
-    CQueryFlag_Funcs      = 1<<3, // int foo() {}
-    CQueryFlag_Funcrefs   = 1<<4, // int bar() { foo(); }
-    CQueryFlag_Defines    = 1<<6, // #define FOO
-    CQueryFlag_Enums      = 1<<7, // enum Bar { FOO } Foo;
-    CQueryFlag_Srcfile    = 1<<8, // foo.c
-    CQueryFlag_Vars       = 1<<9, // unused. probably a mistake
+    CQueryFlag_None       = 0,     // search for Foo matches:
+    CQueryFlag_Structs    = 1<<1,  // struct Foo {}; enum Foo {}; 
+    CQueryFlag_Structrefs = 1<<2,  // Foo a;
+    CQueryFlag_Funcs      = 1<<3,  // int foo() {}
+    CQueryFlag_Funcrefs   = 1<<4,  // int bar() { foo(); }
+    CQueryFlag_Defines    = 1<<6,  // #define FOO
+    CQueryFlag_Enums      = 1<<7,  // enum Bar { FOO } Foo;
+    CQueryFlag_Srcfile    = 1<<8,  // foo.c
+    CQueryFlag_Vars       = 1<<9,  
+    CQueryFlag_cryptic    = 1<<10, 
 } CQueryFlag;
 
 int c_findstructs(CParse *cp, char *sn);

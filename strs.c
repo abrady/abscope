@@ -70,37 +70,6 @@ void strpool_cleanup(StrPool *p)
     free(p->strs);
 }
 
-#define TEST(COND) if(!(COND)) {printf("%s(%d):"#COND ": failed\n",__FILE__,__LINE__); break_if_debugging(); return -1;}
-
-int strpool_test(void)
-{
-    StrPool pool = {0};
-    char *p;
-    int i;
-
-    printf("testing strpool...");
-    TEST(!strpool_find_str(&pool,"abc"));
-    p=strpool_find_add_str(&pool,"abc");
-    TEST(p);
-    TEST(0==strcmp("abc",strpool_find_add_str(&pool,"abc")));
-    TEST(p == strpool_find_add_str(&pool,"abc"));
-    
-    for(i = 0; i < 100; ++i)
-    {
-        int j;
-        char tmp[128];
-        sprintf(tmp,"%i",i);
-        strpool_find_add_str(&pool,tmp);
-        for(j = 0; j <= i; ++j)
-        {
-            sprintf(tmp,"%i",j);
-            TEST(strpool_find_str(&pool,tmp));
-        }
-    }
-    strpool_cleanup(&pool);
-    printf("done.\n");
-    return 0;
-}
 
 // a contiguous block of strs
 void strpool_add_strblock(StrPool *pool, char *strblock, char *end)
@@ -199,4 +168,88 @@ int str_sprintf(char **dst, char *fmt, ...)
     r = str_vsprintf(dst,fmt,vl);
     va_end(vl);
     return r;
+}
+
+char* str_cat(char **dst, char *src)
+{
+    int m,n = 0;
+    if(!src || !dst)
+        return dst ? *dst : NULL;
+    
+    m = strlen(src) + 1;
+    if(*dst)
+        n = strlen(*dst);
+    *dst = realloc(*dst,m+n);
+    if(!n)
+        *(*dst) = 0; // clear the string if we alloc'd it
+    if(0==strcat_s(*dst,m+n,src))
+        return *dst;
+    return NULL;
+}
+
+char* str_catf(char **dst, char *fmt, ...)
+{
+    char *r;
+    va_list vl;
+    va_start(vl,fmt);
+    r = str_vcatf(dst,fmt,vl);
+    va_end(vl);
+    return r;
+}
+
+
+char *str_vcatf(char **dst,char *fmt,va_list args)
+{
+    int c = _vscprintf(fmt,args) + 1;
+    int n = 0;
+    if(!dst)
+        return NULL;
+    if(*dst)
+        n = strlen(*dst);
+    
+    *dst = realloc(*dst,n+c);
+    vsprintf(*dst+n,fmt,args);
+    return *dst;
+}
+
+#define TEST(COND) if(!(COND)) {printf("%s(%d):"#COND ": failed\n",__FILE__,__LINE__); break_if_debugging(); return -1;}
+
+int strpool_test(void)
+{
+    StrPool pool = {0};
+    char *p;
+    int i;
+
+    printf("testing strpool...");
+    TEST(!strpool_find_str(&pool,"abc"));
+    p=strpool_find_add_str(&pool,"abc");
+    TEST(p);
+    TEST(0==strcmp("abc",strpool_find_add_str(&pool,"abc")));
+    TEST(p == strpool_find_add_str(&pool,"abc"));
+    
+    for(i = 0; i < 100; ++i)
+    {
+        int j;
+        char tmp[128];
+        sprintf(tmp,"%i",i);
+        strpool_find_add_str(&pool,tmp);
+        for(j = 0; j <= i; ++j)
+        {
+            sprintf(tmp,"%i",j);
+            TEST(strpool_find_str(&pool,tmp));
+        }
+    }
+    strpool_cleanup(&pool);
+
+#define TEST_S(A,B) TEST(0==strcmp(A,B))
+    p = NULL;
+    str_cat(&p,"a");
+    TEST_S(p,"a");
+    str_cat(&p,"b");
+    TEST_S(p,"ab");
+    str_catf(&p,"%i%s%i",1,"foo",2);
+    TEST_S(p,"ab1foo2");
+    free(p);
+    printf("done.\n");
+    return 0;
 }

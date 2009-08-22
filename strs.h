@@ -37,8 +37,12 @@ int strpool_binwrite(FILE *fp, StrPool *pool);
 
 int strpool_test(void);
 
-int str_vsprintf(char **dst,char *fmt,va_list args);
-int str_sprintf(char **dst, char *fmt, ...);
+int   str_vsprintf(char **dst,char *fmt,va_list args);
+int   str_sprintf(char **dst, char *fmt, ...);
+
+char* str_cat  (char **dst, char *src);
+char* str_catf (char **dst, char *fmt, ...);
+char* str_vcatf(char **dst,char *fmt,va_list args);
 
 
 #endif //STRS_H
