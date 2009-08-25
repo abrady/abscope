@@ -162,9 +162,6 @@ int c_load(CParse *cp)
     return res;
 }
 
-#define FIND_START() S64 timer_start = timer_get()
-#define FIND_END() cp->parse_timing =+ timerdiff(timer_start)
-
 int c_findstructs(CParse *cp, char *sn)
 {
     return parse_print_search_tag(&cp->structs,sn);
@@ -353,25 +350,12 @@ typedef enum c_tokentype
 #define IS_INTRINSIC_TYPE(T) INRANGE(T,CHAR_TOK,VOID_TOK+1)
 #define INTRINSIC_TYPE CHAR_TOK: case SHORT_TOK: case INT_TOK:case LONG_TOK:case SIGNED:case UNSIGNED:case FLOAT_TOK:case DOUBLE:case VOID_TOK
 
-#define TOK_ERROR(ELT,FMT,...) parser_error(p,ELT,FMT,__VA_ARGS__)
-
-
-
 #define PREV_TOK(A) ((p->n_stack >= 2) && top[-1].tok == A)
 #define PREV_TOKS2(A,B) ((p->n_stack >= 3) && top[-2].tok == A && top[-1].tok == B)
 #define PREV_TOKS3(A,B,C) ((p->n_stack >= 4) && top[-3].tok == A && top[-2].tok == B && top[-1].tok == C)
 
-#define POP() {                                 \
-        assert(p->n_stack > 0);                 \
-        p->n_stack--;                           \
-    }
-
-
-#define POP_TO(N) {                             \
-        assert(INRANGE0(N,p->n_stack+1));       \
-        p->n_stack = N;                         \
-        if(p->n_stack < p->m_stack)             \
-            p->m_stack = p->n_stack; }
+#define POP() pop_tok(p)
+#define POP_TO(N) pop_tok_to(p,N)
 
 #define NEXT_TOK()                                                      \
     if(p->n_stack >= MAX_STACK)                                         \
@@ -482,8 +466,8 @@ int c_lex(CParse *p, StackElt *top);
 static ABINLINE StackElt* get_tok(CParse *p)
 {
     StackElt *top;
-    if(p->m_stack < p->n_stack)
-        return p->stack + p->m_stack++;
+    if(p->n_stack < p->m_stack)
+        return p->stack + p->n_stack++;
     ++p->m_stack;
     top = p->stack + p->n_stack++;
     ZeroStruct(top);
@@ -491,21 +475,43 @@ static ABINLINE StackElt* get_tok(CParse *p)
     return top;
 }
 
+static void pop_tok(CParse *p)
+{
+    assert(p->n_stack > 0);
+    assert(p->m_stack >= p->n_stack);
+    if(p->m_stack > p->n_stack)
+    {
+        int n = p->m_stack - p->n_stack;
+        StackElt *dst = p->stack + p->n_stack-1;
+        StackElt *src = dst+1;
+        CopyStructs(dst,src,n);
+    }
+    p->n_stack--;
+    p->m_stack--;
+}
+
+static void pop_tok_to(CParse *p, int n)
+{
+    while(p->n_stack > n)
+        pop_tok(p);
+}
+
 // saves existing elements above the one on the stack.
 static StackElt* unget_tok(CParse *p)
 {
-    if(p->m_stack <= 0)
+    if(p->n_stack <= 0)
         return NULL;
-    return p->stack + --p->m_stack;
+    assert(p->m_stack >= p->n_stack);
+    return p->stack + --p->n_stack;
 }
 
 // unget to a point on the stck
 static StackElt* unget_tok_to(CParse *p, int to)
 {
     StackElt*r = NULL;
-    if(p->m_stack <= 0)
+    if(p->n_stack <= 0)
         return NULL;
-    while(p->m_stack > to)
+    while(p->n_stack > to)
     {
         r = unget_tok(p);
         if(!r)
@@ -571,26 +577,27 @@ done:
 
 
 // matches pairing tokens like '{' and '}'
-static ABINLINE void parse_to_tok(CParse *p, int tok, int open_tok)
-{
-    StackElt *top = 0;
-    int n_open = 1;
-    int n_stack_in;
-
-    if(!DEREF(p,stack))
-        return;
-
-    n_stack_in = p->n_stack;
-    while(n_open)
-    {
-        NEXT_TOK();
-        if(top->tok == open_tok)
-            n_open++;
-        else if(top->tok == tok)
-            n_open--;        
-        POP_TO(n_stack_in);
-    }
-}
+// doesn't use stack for error cases
+ static ABINLINE void parse_to_tok(CParse *p, int tok, int open_tok)
+ {
+     StackElt *top = 0;
+     int n_open = 1;
+     int n_stack_in;
+     
+     if(!DEREF(p,stack))
+         return;
+     
+     n_stack_in = p->n_stack;
+     while(n_open)
+     {
+         NEXT_TOK();
+         if(top->tok == open_tok)
+             n_open++;
+         else if(top->tok == tok)
+             n_open--;        
+         POP_TO(n_stack_in);
+     }
+ }
 
 // expressions:
 // assignment expression
@@ -625,15 +632,15 @@ static void parse_expr(CParse *p, char *ctxt, char terminating_tok, char termina
         case TOK: // keep this around
         {
             char *ref = NULL;
-            if(top[-1].tok == PTR_OP || top[-1].tok == '.' && *top[-1].l.str)      // a.b or a->b
-                ref = top[-1].l.str;
+            if((top[-1].tok == PTR_OP || top[-1].tok == '.') && top[-2].tok == TOK)
+                ref = top[-2].l.str;
             c_add_var(p,top,ref,ctxt);  // add b w/ref to a
+            if(ref)
+                reduce_to(p,p->n_stack-2,top); // just keep this
         }
         break;
         case PTR_OP:
         case '.':
-            if(top[-1].tok == TOK)      // a. or a->
-                stracpy(top->l.str, top[-1].l.str);
             break;
         case '?':
             // parse ? to : then keep going
@@ -653,6 +660,7 @@ static void parse_enum_body(CParse *p, char *enum_typename)
 {
     StackElt *top = NULL;
     int n_stack_in = p->n_stack;
+
     for(;;)
     {
         NEXT_TOK();
@@ -683,6 +691,7 @@ static void parse_initializer(CParse *p, char *ctxt)
 {
     StackElt *top = NULL;
     int n_stack_in = p->n_stack;
+
     for(;;)
     {
         NEXT_TOK();        
@@ -707,6 +716,7 @@ static void parse_arglist(CParse *p, char *ctxt)
 {
     StackElt *top = NULL;
     int n_stack_in = p->n_stack;
+
     for(;;)
     {
         NEXT_TOK();        
@@ -739,6 +749,7 @@ static void parse_var_decls(CParse *p, char *ctxt)
     StackElt *last_tok = NULL;
     StackElt *top = NULL;
     int n_stack_in = p->n_stack;
+
     for(;;)
     {
         NEXT_TOK();        
@@ -815,13 +826,13 @@ static void parse_func_body(CParse *p, char *func_ctxt)
             POP_TO(n_stack_in);
             break;
         case '(':
-            parse_expr(p,func_ctxt,')',0);
             if(top[-1].tok == TOK)
                 c_add_funcref(p,top-1,func_ctxt);
+            parse_expr(p,func_ctxt,')',0);
             POP_TO(n_stack_in);
             break;
         case '=':
-            unget_tok_to(p,n_stack_in);
+            unget_tok_to(p,n_stack_in);    // move back and parse expr
             parse_expr(p,func_ctxt,'=',0);
             top = get_tok(p);
             assert(top->tok == '=');
@@ -902,8 +913,10 @@ static void parse_cryptic_auto_decl(CParse *p)
         case ')':
             if(p->n_stack - n_stack_in < 3)
                 break;
-            if(!PREV_TOKS3(ACMD_NAME,'(',STR))
+            if(top[-3].tok != ACMD_NAME || top[-2].tok != '(')
                 break;
+            if(top[-1].tok != STR && top[-1].tok != TOK)
+                break; // ACMD_NAME can take a quoted or unquoted str
             str_cat(&res,top[-1].l.str);
             break;
         default:
@@ -1361,6 +1374,9 @@ BOOL dirscan_accept_c_files(char *path, char **ctxt)
 
 int c_parse_test()
 {
+    int i;
+    StackElt stack[MAX_STACK] = {0};
+    CParse *p = NULL;
     CParse cp = {0};
     CParse cp2 = {0};
     LocInfo *li;
@@ -1378,7 +1394,28 @@ int c_parse_test()
     static char *structs_not_to_find[] = {
         "Cat", // typedef only
     };
+
+    // ----------
+    // test stack ops
+    p = &cp;
+    p->stack = stack;
+    for(i = 0; i < 10; ++i)
+        p->stack[i].tok = i+1;
+    p->n_stack = 10;
+    p->m_stack = 10;
     
+    unget_tok_to(p,6);
+    POP_TO(1);
+    POP();
+    for(i = 0; i < 4; ++i)
+    {
+        StackElt *top = get_tok(p);
+        TEST(top->tok == i+7);
+    }
+    
+    
+    ZeroStruct(p);
+        
     // ----------------------------------------
     // parse a test file
     
@@ -1438,7 +1475,8 @@ int c_parse_test()
     TEST(0==stricmp(li->file,"test/Foo.c"));
     TEST(0==strcmp(li->context,"struct Bar"));
     TEST(li->child && li->child->n_locs == 2);
-    li = li->child->locs;
+
+    INIT_LI((*li->child));
     TEST_LI("bar_a", "int",  "struct Bar");
     TEST_LI("baz_b", "char", "struct Bar");
 
@@ -1503,14 +1541,15 @@ int c_parse_test()
     TEST(0==strcmp(li->context ,"func test_func3"));
 
     INIT_LI(cp.cryptic);
-    TEST_LI("Acmd", "exprAcmd", "AUTO_EXPR_FUNC(UIGen) ACMD_NAME('Acmd');");
+    TEST_LI("test_func_expr",     "test_func",  "AUTO_EXPR_FUNC(UIGen) ACMD_NAME('test_fu");
+    TEST_LI("test_func2_command", "test_func2", "AUTO_COMMAND ACMD_NAME(test_func2_co");
+    TEST_LI("Acmd",               "exprAcmd",   "AUTO_EXPR_FUNC(UIGen) ACMD_NAME('Acmd');");
     TEST(li == li_end);    
 
     // ----------
     // queries
 
     n_lis = parse_locinfos_from_context(&cp.vars,"func test_func3",&lis);
-    TEST(n_lis == 12);
     pli = lis;
     li_end = (*pli) + n_lis;
     TEST(0==strcmp(pli[0]->context,"func test_func3"));
@@ -1526,6 +1565,7 @@ int c_parse_test()
     TEST(0==strcmp((*pli++)->tag,"bSellEnabled"));
     TEST(0==strcmp((*pli++)->tag,"foo"));
     TEST(0==strcmp((*pli++)->tag,"eBar"));
+    TEST(n_lis == 12);
 
     INIT_LI(cp.srcfiles);
     TEST_LI("foo.c", "test/foo.c", "file test/foo.c");
