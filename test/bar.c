@@ -1,3 +1,25 @@
+void foo_why_isn_time_to_linger_getting_added()
+{
+    if (entCheckFlag(pent, ENTITYFLAG_DESTROY) || pent->pCritter->timeToLinger < 0.0)
+    {
+    }
+}
+
+
+// item/inventoryCommon.c/(704): this isn't showing up as a function
+AUTO_TRANS_HELPER;
+int inv_ent_trh_AddBag(ATR_ARGS, ATH_ARG NOCONST(Entity)* pEnt, bool bSilent, NOCONST(InventoryBag)* pBag)
+{
+    if ( ISNULL(pEnt))
+        return false;
+    
+    if (inv_trh_GetBag(ATR_PASS_ARGS,pEnt,bSilent,pBag->BagID))
+        return false;
+	eaIndexedAdd(&pEnt->pInventory->ppInventoryBags, pBag);
+	return true;
+}
+
+
 AUTO_EXPR_FUNC(UIGen) ACMD_NAME("InitMenus");
 void lots_of_args()
 {

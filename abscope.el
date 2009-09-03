@@ -6,7 +6,9 @@
 ;; - list of files in project for auto complete
 ;; - string pool
 ;; - shrink footprint.
-
+;; - auto_commands and expressions
+;; - push mark properly
+;; - window saving isn't working for abj
 (setq abscope-file "abscope-queries.org")
 (setq abscope-exe "c:/abs/abscope/abscope.exe")
 
@@ -23,6 +25,10 @@
     (if (string-match "\\(c:/src.*?\\)/" bn)
           (find-file-noselect (concat (match-string 1 bn) "/" abscope-file ))
       (find-file-noselect (concat "c:/src/" abscope-file)))))
+
+(defun abscope-dir ()
+  (with-current-buffer (abscope-file)
+    (string-replace-match "/$" default-directory "")))
 
 (defun abscope-proc ()
   "get the abscope process for a given project"
@@ -134,7 +140,8 @@ Ctxt c"
               (loop for i in forms do
                     (case (car i)
                       ('LocInfo (abs-print-locinfo (cdr i) "**"))
-                      (t (message "unknown form")))
+                      ('QUERY_DONE) ;; nothing to do
+                      (t (message "unknown form %s" (print i))))
                     )
               )
           (insert (format "error in output %s" (princ err)))
@@ -161,7 +168,8 @@ Ctxt c"
     )
   )
 
-(defun abscope-query-data (type tag process-defun)
+(defun abs-query (type tag)
+  "fundamental function for queueing a request."
   (with-current-buffer (abscope-file)
     (abscope-re-launch)
     (if (equal type "") (setq type "a"))
@@ -172,7 +180,7 @@ Ctxt c"
     (push-mark (point))
     (set-marker (process-mark abscope-process) (point))
 
-    (tq-enqueue abscope-tq (concat "Query " type " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process process-defun)
+    (tq-enqueue abscope-tq (concat "Query " type " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output)
     (abs-proc-wait-once)
     (tq-process-buffer abscope-tq)
     )
@@ -191,7 +199,7 @@ Ctxt c"
   (interactive "s (s)truct (S)tructref (f)unc (F)uncref:
 stag:")
   (iswitchb-visit-buffer (abscope-file))
-  (abscope-query-data type tag 'abscope-proc-print-output)
+  (abs-query type tag)
   )
 
 
@@ -235,7 +243,7 @@ stag:")
   (interactive)
   (let
       ((buf))
-    (find-file (abscope-file))
+    (find-file (buffer-file-name (abscope-file)))
 
     (setq buf (save-window-excursion
                       (org-open-at-point)
@@ -293,42 +301,6 @@ stag:")
     )
   )
 
-(defvar abscope-find-members-history)
-(defun abscope-find-members ()
-  (interactive)
-  (let
-      (
-       (varname)
-       (vartype)
-       (mbrs)
-       (li)
-       )
-    (save-excursion
-      (backward-word)
-      (setq varname (thing-at-point 'symbol))
-      (setq vartype (abscope-find-var-type (concat "\\b" varname "\\b")))
-      (if (not vartype)
-          (error "couldn't find vartype for var %s" varname)
-        )
-      (setq vartype (concat "\\b" vartype "\\b"))
-      (setq abscope-last-output nil)
-      (abscope-query-data "s" vartype 'abs-proc-eval-output)
-(abs-proc-wait-until-done)      (if (not abscope-last-output)
-          (error "no info for type %s" vartype))
-      
-      (if (equal (car abscope-last-output) '(QUERY_DONE))
-          (error "no matches found for type %s" vartype))
-
-      (save-window-excursion
-        (setq li (cdar abscope-last-output))
-        (find-file (concat abscope-dir (cdr (assoc 'File li))))
-        (goto-line (string-to-number (cdr (assoc 'Lineno li))))
-        (setq mbrs (abscope-gather-struct-vars)))
-      )
-    (insert (completing-read "mbr:" mbrs nil t nil 'abscope-find-members-history nil nil))
-    )
-  )
-
 (defun abscope-jump(tag flags)
   (interactive (list (read-string "tag:" (readWordOrRegion))
                (read-string "flags (s)truct (f)unc:" "a" 'abscope-find-members-history)))
@@ -342,7 +314,7 @@ stag:")
     (save-window-excursion
       (with-current-buffer (abscope-file)
         (setq abscope-last-output nil)
-        (abscope-query flags tag) ;; this logs the history as well as provides the info
+        (abs-query flags tag) ;; this logs the history as well as provides the info
         (abs-proc-wait-until-done)      (if (not abscope-last-output) 
                                             (error "no info for type %s" vartype))      
         (setq lis (loop for i in abscope-last-output
@@ -355,7 +327,7 @@ stag:")
       )
     (if (not loc)
         (error "no location found"))
-    (find-file (concat abscope-dir (cdr (assoc 'File loc))))
+    (find-file (concat (abscope-dir) (cdr (assoc 'File loc))))
     (goto-line (string-to-number   (cdr (assoc 'Lineno loc))))
     )
   )
@@ -408,6 +380,53 @@ stag:")
         )
       )
     (insert li)
+    )
+  )
+
+(defvar abs-find-members-history)
+(defvar abs-find-members-last-type)
+
+(defun abscope-find-members ()
+  (interactive)
+  (let
+      (
+       (varname)
+       (vartype)
+       (mbrs)
+       (li)
+       (mbr)
+       (choice)
+       )
+    (save-excursion
+      (backward-word)
+      (setq varname (thing-at-point 'symbol))
+      (setq vartype (abscope-find-var-type (concat "\\b" varname "\\b")))
+      (if (not vartype)
+          (error "couldn't find vartype for var %s" varname)
+        )
+      (setq vartype (concat "\\b" vartype "\\b" ))
+      (setq abscope-last-output nil)
+      (save-window-excursion
+        (with-current-buffer (abscope-file)
+          (abs-query "s" vartype)
+          (abs-proc-wait-until-done)
+          (if (not abscope-last-output)
+              (error "no info for type %s" vartype))
+          
+          (if (equal (car abscope-last-output) '(QUERY_DONE))
+              (error "no matches found for type %s" vartype))
+          
+          (setq li (cdar abscope-last-output))
+          (find-file (cdr (assoc 'File li)))
+          (goto-line (string-to-number (cdr (assoc 'Lineno li))))
+          (setq mbrs (abscope-gather-struct-vars)))
+        )
+      )
+    (setq choice (completing-read "mbr:" mbrs nil t nil 'abs-find-members-history nil nil))
+    (setq mbr (assoc choice 'abs-find-members-history))
+    (insert choice)
+    (if (string-match " *\b\\(.*?\\) " (cdr mbr))
+        (setq abs-find-members-last-type (match-string 1 (cdr mbr))))
     )
   )
          

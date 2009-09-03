@@ -231,7 +231,7 @@ int c_query(CParse *cp, char *tag, int query_flags)
         res += c_findsrcfiles(cp,tag);
     if(query_flags & CQueryFlag_Vars)
         res += c_findvars(cp,tag);
-    if(query_flags & CQueryFlag_cryptic)
+    if(query_flags & CQueryFlag_Cryptic)
         res += c_findcryptic(cp,tag);
     printf("(QUERY_DONE))\n\n");
     fflush(stdout);
@@ -929,7 +929,7 @@ int c_parse(CParse *p)
 {
     char ctxt[128];
     StackElt stack[MAX_STACK] = {0}; 
-    StackElt *top;
+    StackElt *top = NULL;
     int res = 0;
     char *s;
 //    c_debug = 1;
@@ -943,14 +943,14 @@ int c_parse(CParse *p)
         switch(top->tok)
         {
         case '{':
-            if(PREV_TOKS3(TYPEDEF,STRUCT, TOK)) // struct decl
+            if(PREV_TOKS3(TYPEDEF,STRUCT, TOK)) // struct def
             {
                 LocInfo *l;
                 l = c_add_struct(p,top[-1].l.str,top[-1].lineno);
                 parse_struct_body(p,l);
                 POP_TO(0);
             }
-            else if(PREV_TOKS2(ENUM,TOK)) // struct decl
+            else if(PREV_TOKS2(ENUM,TOK)) // enum def
             {
                 s = top[-1].l.str;
                 c_add_enum_decl(p,s,top[-1].lineno);
