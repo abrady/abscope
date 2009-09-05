@@ -228,7 +228,7 @@ int c_query(CParse *cp, char *tag, int query_flags)
         res += c_findsrcfiles(cp,tag);
     if(query_flags & CQueryFlag_Vars)
         res += c_findvars(cp,tag);
-    if(query_flags & CQueryFlag_cryptic)
+    if(query_flags & CQueryFlag_Cryptic)
         res += c_findcryptic(cp,tag);
     printf("(QUERY_DONE))\n\n");
     fflush(stdout);
@@ -520,6 +520,13 @@ static StackElt* unget_tok_to(CParse *p, int to)
     return r;
 }
 
+static StackElt* peek_tok(CParse *p)
+{
+    StackElt *res = get_tok(p);
+    unget_tok(p);
+    return res;
+}
+
 static void reduce_to(CParse *p, int to, StackElt *top)
 {
     StackElt* r;
@@ -578,34 +585,74 @@ done:
 
 // matches pairing tokens like '{' and '}'
 // doesn't use stack for error cases
- static ABINLINE void parse_to_tok(CParse *p, int tok, int open_tok)
- {
-     StackElt *top = 0;
-     int n_open = 1;
-     int n_stack_in;
-     
-     if(!DEREF(p,stack))
-         return;
-     
-     n_stack_in = p->n_stack;
-     while(n_open)
-     {
-         NEXT_TOK();
-         if(top->tok == open_tok)
-             n_open++;
-         else if(top->tok == tok)
-             n_open--;        
-         POP_TO(n_stack_in);
-     }
- }
+static ABINLINE void parse_to_tok(CParse *p, int tok, int open_tok)
+{
+    StackElt *top = 0;
+    int n_open = 1;
+    int n_stack_in;
+    
+    if(!DEREF(p,stack))
+        return;
+    
+    n_stack_in = p->n_stack;
+    while(n_open)
+    {
+        NEXT_TOK();
+        if(top->tok == open_tok)
+            n_open++;
+        else if(top->tok == tok)
+            n_open--;        
+        POP_TO(n_stack_in);
+    }
+}
 
-// expressions:
-// assignment expression
-// conditional expression
-// expression, expression
-// transition to this from:
-// - expression_stmt: expression;
-// -  
+// extern void foo();
+// {typedef | extern | static | auto | register
+// | type (builtins, TOK)
+// | struct name? { ... }
+// | const | restrict | volatile}* ;
+//static void parse_declaration(CParse *p)
+//{
+//}
+
+static void parse_expr(CParse *p, char *ctxt, char terminating_tok, char terminating_tok2);
+
+static void parse_arg_expr(CParse *p, char *ctxt)
+{
+    int n_stack_in = p->n_stack;
+    StackElt *beg = p->stack + n_stack_in;
+    
+    do
+    {
+        parse_expr(p,ctxt,',',')');
+    } while(beg->tok != ')');
+}
+
+
+
+
+// expressions: expr, expr
+// assignment expression:
+// cond_expr:
+//   or_expr '?' expr ':' cond_expr
+//   or_expr
+// or_expr: rel_expr {==,!=,^,|,&&,||,<,>,<=,>=,<<,>>,+,-,*,/,%}?  rel_expr?
+// rel_expr:
+//  '(' TOK ')' unary_expr // cast
+//  unary_expr
+// unary_expr: 
+//  postfix_expr
+//  {++,--,&,*,+,-,~,!} unary_expr
+//  SIZEOF unary_expr   // could include '(' ... ')'
+// postfix_expr:
+//  TOK
+//  '(' expr ')' 
+//  postfix_expr '[' expr ']'
+//  postfix_expr '(' arg_expr_list ')'
+//  postfix_expr '.' TOK
+//  postfix_expr ->  TOK
+//  postfix_expr '++'
+//  postfix_expr '--'
 static void parse_expr(CParse *p, char *ctxt, char terminating_tok, char terminating_tok2)  
 {
     StackElt *top = NULL;
@@ -618,35 +665,61 @@ static void parse_expr(CParse *p, char *ctxt, char terminating_tok, char termina
             break;
         switch(top->tok)
         {
-        case '(':
+        case TOK: // keep this around
+        {
+            char *ref = NULL;
+            if((top[-1].tok == PTR_OP || top[-1].tok == '.') && top[-2].tok == TOK)
+                ref = top[-2].l.str;
+            c_add_var(p,top,ref,ctxt);
+            if(ref)
+                reduce_to(p,n_stack_in,top); // just keep this
+        }
+        break;
+        case '(': // funcall, typecast, parenthesized expr
             if(top[-1].tok == TOK)
                 c_add_funcref(p,top-1,ctxt);
-            parse_expr(p,ctxt,')',0);
+            parse_arg_expr(p,ctxt);
+            POP_TO(n_stack_in);
+            break;
+        case '[':
+            parse_expr(p,ctxt,']',0);
+            POP_TO(n_stack_in);
+            break;
+        case PTR_OP:
+        case '.':
+            break;
+        case EQ_OP:
+        case NE_OP:
+        case '^':
+        case '|':
+        case AND_OP:
+        case OR_OP:
+        case '<':
+        case '>':
+        case LE_OP:
+        case GE_OP:            
+        case LEFT_OP:
+        case RIGHT_OP:
+        case '/':
+        case '%':
+        case '&': // unary ops
+        case '*':
+        case '+':
+        case '-':
+        case '~':
+        case '!':
+        case SIZEOF:
+        case DEC_OP:
+        case INC_OP:
+        case '?': // ternary op, just toss it
+        case ':':
+            POP_TO(n_stack_in);
             break;
         case ')':
             POP_TO(n_stack_in);
             break;
         case '}':
             POP_TO(n_stack_in);
-            break;
-        case TOK: // keep this around
-        {
-            char *ref = NULL;
-            if((top[-1].tok == PTR_OP || top[-1].tok == '.') && top[-2].tok == TOK)
-                ref = top[-2].l.str;
-            c_add_var(p,top,ref,ctxt);  // add b w/ref to a
-            if(ref)
-                reduce_to(p,p->n_stack-2,top); // just keep this
-        }
-        break;
-        case PTR_OP:
-        case '.':
-            break;
-        case '?':
-            // parse ? to : then keep going
-            parse_expr(p,ctxt,':',0);
-            break;
-        case ':':
             break;
         default:
             break;
@@ -806,10 +879,23 @@ done:
     unget_tok_to(p,n_stack_in);
 }
 
+// stmt:
+// label : terminated by ':'
+// compnd: { stmt* }
+// expr  : terminated by ';'
+// select: if, if else, switch: term by '}' or ';'
+// iter  : while(), do-while();, for()
+// jump  : goto TOK, continue, break, return ';'
+
+// compound stmt:
+// declaration
+// stmt
 static void parse_func_body(CParse *p, char *func_ctxt)
 {
+    StackElt *peek = NULL;
     StackElt *top = NULL;
     int n_stack_in = p->n_stack;
+    StackElt *beg = p->stack + n_stack_in;
 
     parse_var_decls(p,func_ctxt);
     for(;;)
@@ -821,26 +907,72 @@ static void parse_func_body(CParse *p, char *func_ctxt)
 
         switch(top->tok)
         {
+        case ':':
+            if(beg->tok == CASE)
+            {
+                unget_tok_to(p,n_stack_in+1);
+                parse_expr(p,func_ctxt,':',0); // expressions are a superset of what is allowed, but should parse this just fine
+            }
+            POP_TO(n_stack_in);
+            break;
         case '{':
             parse_func_body(p,func_ctxt);
             POP_TO(n_stack_in);
             break;
-        case '(':
-            if(top[-1].tok == TOK)
-                c_add_funcref(p,top-1,func_ctxt);
+        case ';':
+            parse_expr(p,func_ctxt,';',0);
+            POP_TO(n_stack_in);
+        case DO:
+            POP_TO(n_stack_in);
+            break;
+        case WHILE:
+        case IF:
+            peek = peek_tok(p);
+            if(DEREF(peek,tok) != '(')
+                break;
             parse_expr(p,func_ctxt,')',0);
             POP_TO(n_stack_in);
             break;
-        case '=':
-            unget_tok_to(p,n_stack_in);    // move back and parse expr
-            parse_expr(p,func_ctxt,'=',0);
-            top = get_tok(p);
-            assert(top->tok == '=');
-            parse_expr(p,func_ctxt,';',0);
+        case ELSE: // followed by '{', expr, or IF. handled in-loop
             POP_TO(n_stack_in);
             break;
-        case ';':
+        case FOR:
+            peek = peek_tok(p);
+            if(DEREF(peek,tok) != '(')
+                break;
+            get_tok(p);
+            // for(a;b;c)
+            parse_expr(p,func_ctxt,';',0);
+            parse_expr(p,func_ctxt,';',0);
+            parse_expr(p,func_ctxt,')',0);
             POP_TO(n_stack_in);
+            break;
+        case GOTO:
+            get_tok(p);
+        case CONTINUE:
+        case BREAK:
+            POP_TO(n_stack_in);
+            break;
+        case RETURN:
+            peek = peek_tok(p);
+            if(peek && peek->tok != ';')
+                parse_expr(p,func_ctxt,';',0);
+            POP_TO(n_stack_in);
+            break;
+//         case '(': // stand-alone parenthesized expr (valid?)
+//             if(top[-1].tok == TOK)
+//                 c_add_funcref(p,top-1,func_ctxt);
+//             parse_expr(p,func_ctxt,')',0);
+//             POP_TO(n_stack_in);
+//             break;
+//         case '=':
+//             unget_tok_to(p,n_stack_in);    // move back and parse expr
+//             parse_expr(p,func_ctxt,'=',0);
+//             top = get_tok(p);
+//             assert(top->tok == '=');
+//             parse_expr(p,func_ctxt,';',0);
+//             POP_TO(n_stack_in);
+//             break;
         default:
             // todo: if(top[-1].tok == TOK) -> add var
             break;
@@ -942,7 +1074,7 @@ int c_parse(CParse *p)
 {
     char ctxt[128];
     StackElt stack[MAX_STACK] = {0}; 
-    StackElt *top;
+    StackElt *top = NULL;
     int res = 0;
     char *s;
 //    c_debug = 1;
@@ -950,20 +1082,23 @@ int c_parse(CParse *p)
     p->m_stack = 0;
     p->n_stack = 0;
     
+    // the top loop is really either:
+    // declarations : extern foo();, struct Bar, int baz, enum trois
+    // function definitions.
     for(;;)
     {
         NEXT_TOK();
         switch(top->tok)
         {
         case '{':
-            if(PREV_TOKS3(TYPEDEF,STRUCT, TOK)) // struct decl
+            if(PREV_TOKS3(TYPEDEF,STRUCT, TOK)) // struct def
             {
                 LocInfo *l;
                 l = c_add_struct(p,top[-1].l.str,top[-1].lineno);
                 parse_struct_body(p,l);
                 POP_TO(0);
             }
-            else if(PREV_TOKS2(ENUM,TOK)) // struct decl
+            else if(PREV_TOKS2(ENUM,TOK)) // enum def
             {
                 s = top[-1].l.str;
                 c_add_enum_decl(p,s,top[-1].lineno);
@@ -979,7 +1114,6 @@ int c_parse(CParse *p)
                 parse_func_body(p,ctxt);
                 POP_TO(0);
             }
-
             break;
         case '(':
             if(p->n_stack <= 1)

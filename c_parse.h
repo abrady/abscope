@@ -76,7 +76,7 @@ typedef enum CQueryFlag
     CQueryFlag_Enums      = 1<<7,  // enum Bar { FOO } Foo;
     CQueryFlag_Srcfile    = 1<<8,  // foo.c
     CQueryFlag_Vars       = 1<<9,  
-    CQueryFlag_cryptic    = 1<<10, 
+    CQueryFlag_Cryptic    = 1<<10, 
 } CQueryFlag;
 
 int c_findstructs(CParse *cp, char *sn);

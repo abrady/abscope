@@ -25,7 +25,7 @@ static void usage(int argc, char**argv)
            "-v\t\t: verbose output\n"
            "-T\t\t: run tests\n"
            "-D[pt]\t\t: debug (p)arse, (t)iming\n"
-           "-Q[sSfFdeca]\t\t: query for (s)tructs, (S)tructrefs (f)unctions (F)uncrefs (d)efines sr(c)file (e)nums (a)ll\n"
+           "-Q[sSfFdecpa]\t\t: query for (s)tructs, (S)tructrefs (f)unctions (F)uncrefs (d)efines sr(c)file (e)nums Cry(p)tic (a)ll\n"
 #ifdef _DEBUG
            "-Z\t\t: wait for debugger attach\n"
 #endif
@@ -128,6 +128,9 @@ static int c_query_flags_from_str(char *a_in)
             break;
         case 'v':
             c_query_flags |= CQueryFlag_Vars;
+            break;
+        case 'p':
+            c_query_flags |= CQueryFlag_Cryptic;
             break;
         case 'a':
             c_query_flags = 0xffffffff;
