@@ -4,11 +4,10 @@
 ;; - local vars command => completing read
 ;; - function params
 ;; - list of files in project for auto complete
-;; - string pool
+;; - global string pool
 ;; - shrink footprint.
-;; - auto_commands and expressions
 ;; - push mark properly
-;; - window saving isn't working for abj
+;; - add strings.abs : for searching all text strings
 (setq abscope-file "abscope-queries.org")
 (setq abscope-exe "c:/abs/abscope/abscope.exe")
 
@@ -225,6 +224,12 @@ stag:")
   (abscope-query "s" tag)
   )
 
+(defun abqy (tag)
+  "find a  cryptic def"
+  (interactive (list (read-string "cryptic to search for:" (readWordOrRegion))))
+  (abscope-query "y" tag)
+  )
+
 
 (defun cdbabscope-testparse () 
   (interactive)
@@ -386,11 +391,17 @@ stag:")
 (defvar abs-find-members-history)
 (defvar abs-find-members-last-type)
 
-(defun abscope-find-members ()
-  (interactive)
+(defun abs-nearest-tag ()
+  "helper for finding a previous tag"
+  (save-excursion
+	(backward-word)
+	(thing-at-point 'symbol)))
+
+
+(defun abscope-find-members (varname)
+  (interactive (list (abs-nearest-tag)))
   (let
       (
-       (varname)
        (vartype)
        (mbrs)
        (li)
@@ -398,8 +409,8 @@ stag:")
        (choice)
        )
     (save-excursion
-      (backward-word)
-      (setq varname (thing-at-point 'symbol))
+	  (if (not varname)
+		  (error "no var found"))
       (setq vartype (abscope-find-var-type (concat "\\b" varname "\\b")))
       (if (not vartype)
           (error "couldn't find vartype for var %s" varname)
@@ -423,11 +434,68 @@ stag:")
         )
       )
     (setq choice (completing-read "mbr:" mbrs nil t nil 'abs-find-members-history nil nil))
-    (setq mbr (assoc choice 'abs-find-members-history))
+    (setq mbr (assoc choice mbrs))
     (insert choice)
     (if (string-match " *\b\\(.*?\\) " (cdr mbr))
         (setq abs-find-members-last-type (match-string 1 (cdr mbr))))
     )
   )
-         
+(defalias 'abfm 'abscope-find-members)
+
+(defun abs-choose-result ()
+  (let
+	  (
+	   (o)
+	   (c)
+	   )
+	(setq o (loop for j from 0 for i in abscope-last-output 
+				  if (eq (car i) 'LocInfo) collect (cons (format "%s" (cdr (assoc 'Tag (cdr i)))) (cdr i))))
+	(setq c 
+		  (if (> (length o) 1)
+			  (completing-read "tag: " o nil t nil 'abs-find-members-history)
+			(caar o)))
+	(cdr (assoc c o))
+	)
+  )
+  
+
+(defun abscope-find-params (funcname)
+  (interactive (list (abs-nearest-tag)))
+  (let
+	  (
+	   (li) 
+	   (parms-str)
+	   (parms)
+	   (p)
+	   (tag)
+	   )
+	(if (not funcname)
+		(error "no func found"))
+	(with-current-buffer (abscope-file)	  
+	  (abs-query "fd" (format "\\b%s\\b" funcname))
+	  (abs-proc-wait-until-done)
+	  (if (not abscope-last-output)
+		  (error "no info for func %s" funcname))
+	  (setq li (abs-choose-result))
+	  (save-window-excursion
+		(find-file (cdr (assoc 'File li)))
+		(goto-line (string-to-number (cdr (assoc 'Lineno li))))
+		(re-search-forward "(\\(.*\\))" nil t)
+		(setq parms-str (match-string 1))
+		)
+	  )
+	(setq tag (cdr (assoc 'Tag li)))
+	(setq parms (split-string parms-str ","))
+	(loop with first = nil for i in parms do
+		  (if first
+			  (insert ", "))
+		  (setq first t)
+		  (setq p (read-string (concat tag ": " i " :")))
+		  (insert p))
+	) 
+  )
+	  
+	  
+
+
 (provide 'abscope)

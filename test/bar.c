@@ -1,3 +1,18 @@
+AUTO_EXPR_FUNC(util) ACMD_NAME(TimeSinceSS2000);
+U32 exprFuncTimeSinceSS2000(U32 iInTime)
+{
+	return timeSecondsSince2000() - iInTime;
+}
+
+AUTO_ENUM AEN_EXTEND_WITH_DYNLIST(g_ExtraCharClassTypeIDs);
+typedef enum CharClassTypes
+{
+	CharClassTypes_None = 0
+	//None is assumed to be the last fixed bag ID by the dynamic enum loading code.
+	//Add any new modes after it
+
+} CharClassTypes;
+
 void foo_why_isn_time_to_linger_getting_added()
 {
     if (entCheckFlag(pent, ENTITYFLAG_DESTROY) || pent->pCritter->timeToLinger < 0.0)
