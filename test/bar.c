@@ -13,8 +13,24 @@ typedef enum CharClassTypes
 
 } CharClassTypes;
 
-void foo_why_isn_time_to_linger_getting_added()
+void if_testing_suite()
 {
+    if(a)
+        foo = 0;
+    else
+        foo = 1;
+    if(b)
+    {
+        foo = 2;
+    }
+    else if(c)
+    {
+        foo = 3;
+    }
+}
+
+void foo_why_isn_time_to_linger_getting_added()
+{    
     if (entCheckFlag(pent, ENTITYFLAG_DESTROY) || pent->pCritter->timeToLinger < 0.0)
     {
     }
@@ -60,6 +76,7 @@ void lots_of_args()
 		estrConcatString(&sky_debug_text, sky_text, estrLength(&sky_text));
 	}
 }
+
 
 void wleMenuInitMenus(void)
 {
@@ -299,6 +316,32 @@ void wleMenuInitMenus(void)
 	EditorPrefGetStruct(WLE_PREF_EDITOR_NAME, WLE_PREF_CAT_OPTIONS, "CustomMenu", parse_EdObjCustomMenu, wleMenuRightClick);
 
 	PERFINFO_AUTO_STOP();
+}
+
+AUTO_EXPR_FUNC(UIGen) ACMD_NAME("InitMenus");
+void lots_of_args()
+{
+	for( i=0; i < sky_data->visible_sky->skyDomeCount; i++ )
+	{
+		estrPrintf(&sky_text, "\n%s:\n    Alpha(%g)\n    Sort Order(%g)\n    High Detail(%d)\n    Draw Percent(%g)\n    Scale(%g)\n    Angle(%g)\n    Ambient(%.2f, %.2f, %.2f)\n    Tint(%.2f, %.2f, %.2f)\n    Position(%.2f, %.2f, %.2f)\n", 
+			sky_data->visible_sky->skyDomes[i]->dome->name, 
+			sky_data->visible_sky->skyDomes[i]->alpha,
+			sky_data->visible_sky->skyDomes[i]->sort_order,
+			sky_data->visible_sky->skyDomes[i]->high_detail, 
+			sky_data->visible_sky->skyDomes[i]->group_percent,
+			sky_data->visible_sky->skyDomes[i]->dome->current_dome_values.scale,
+			sky_data->visible_sky->skyDomes[i]->dome->current_dome_values.angle,
+			sky_data->visible_sky->skyDomes[i]->dome->current_dome_values.ambientHSV[0],
+			sky_data->visible_sky->skyDomes[i]->dome->current_dome_values.ambientHSV[1],
+			sky_data->visible_sky->skyDomes[i]->dome->current_dome_values.ambientHSV[2],
+			sky_data->visible_sky->skyDomes[i]->dome->current_dome_values.tintHSV[0],
+			sky_data->visible_sky->skyDomes[i]->dome->current_dome_values.tintHSV[1],
+			sky_data->visible_sky->skyDomes[i]->dome->current_dome_values.tintHSV[2],
+			sky_data->visible_sky->skyDomes[i]->dome->current_dome_values.pos[0],
+			sky_data->visible_sky->skyDomes[i]->dome->current_dome_values.pos[1],
+			sky_data->visible_sky->skyDomes[i]->dome->current_dome_values.pos[2]);
+		estrConcatString(&sky_debug_text, sky_text, estrLength(&sky_text));
+	}
 }
 typedef enum PCLayerArea {
 	kPCLayerArea_Main,

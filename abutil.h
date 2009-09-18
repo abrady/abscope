@@ -71,8 +71,8 @@ typedef int int32_t;
 #define DIMOF(A) (sizeof(A)/sizeof(*(A)))
 #define SSTR(S) S,DIMOF(S)
 #define ZeroStruct(ptr) memset((ptr), 0, sizeof(*(ptr)))
-#define ZeroStructs(ptr,n) memset((ptr), 0, sizeof(*(ptr))*n)
-#define CopyStructs(Dst,Src,N) memmove(Dst,Src,N*sizeof(*(SRC)))
+#define ZeroStructs(ptr,n) memset((ptr), 0, sizeof(*(ptr))*(n))
+#define CopyStructs(dst,src,n) memmove(dst,src,(n)*sizeof(*(src)))
 
 #ifndef R_OK
 #   define R_OK 0x04       // for access()

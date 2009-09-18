@@ -10,6 +10,7 @@ typedef struct Bar
     char baz_b;
 } Foo;
 
+AUTO_EXPR_FUNC(UIGen) ACMD_NAME("test_func_expr");
 void test_func( Entity *pEnt, char *RewardTableName, char *ChoiceName )
 {
     int a = pEnt ? pEnt->n : 0;
@@ -55,6 +56,7 @@ typedef enum Baz
     Bar_C
 } Bar;
 
+AUTO_COMMAND ACMD_NAME(test_func2_command);
 void test_func2( Entity *pEnt, char *RewardTableName, char *ChoiceName )
 {
     foo(pEnt,a,b);
