@@ -6,10 +6,21 @@
 ;; - list of files in project for auto complete
 ;; - global string pool
 ;; - shrink footprint.
-;; - push mark properly
+;; - push mark properly:
+;; -- org-follow-link-hook
+;; -- org-open-file
 ;; - add strings.abs : for searching all text strings
+;; - context should grab entire line
 (setq abscope-file "abscope-queries.org")
 (setq abscope-exe "c:/abs/abscope/abscope.exe")
+
+(defun abs-follow-link-hook ()
+  "what do do after an abscope link is followed by org mode"
+  (push-mark)
+  )
+
+
+(add-hook 'org-follow-link-hook 'abs-follow-link-hook)
 
 ;;(setq abscope-dir "c:/src")
 (defvar abscope-process nil "the process for each project")
@@ -176,7 +187,6 @@ Ctxt c"
 
     (end-of-buffer)
     (insert "\n\n* " tag)
-    (push-mark (point))
     (set-marker (process-mark abscope-process) (point))
 
     (tq-enqueue abscope-tq (concat "Query " type " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output)
@@ -218,18 +228,30 @@ stag:")
   (interactive (list (read-string "func to search for:" (readWordOrRegion))))
   (abscope-query "f" tag)
   )
+
+(defun abqF (tag)
+  "find a function ref"
+  (interactive (list (read-string "func to search for:" (readWordOrRegion))))
+  (abscope-query "F" tag)
+  )
+
 (defun abqs (tag)
   "find a struct def"
   (interactive (list (read-string "struct to search for:" (readWordOrRegion))))
   (abscope-query "s" tag)
   )
 
-(defun abqy (tag)
+(defun abqp (tag)
   "find a  cryptic def"
   (interactive (list (read-string "cryptic to search for:" (readWordOrRegion))))
-  (abscope-query "y" tag)
+  (abscope-query "p" tag)
   )
 
+(defun abqd (tag)
+  "find define"
+  (interactive (list (read-string "The tag to search for:" (readWordOrRegion))))
+  (abscope-query "ad" tag)
+  )
 
 (defun cdbabscope-testparse () 
   (interactive)
@@ -285,12 +307,18 @@ stag:")
   (let
       (
        (pt-max (point))
+	   (s)
        )
     (save-excursion
       (beginning-of-defun)
       (re-search-forward varname pt-max)
       (backward-sexp 2)
-      (thing-at-point 'symbol)
+      (setq s (thing-at-point 'symbol))
+	  (if (equal s "NOCONST")
+		  (progn
+			(forward-char 1)
+			(thing-at-point 'symbol))
+		s)
       )))
 
 (defun abscope-gather-vars (start end)
@@ -441,6 +469,7 @@ stag:")
     )
   )
 (defalias 'abfm 'abscope-find-members)
+(defalias 'fm 'abscope-find-members)
 
 (defun abs-choose-result ()
   (let
