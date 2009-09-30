@@ -352,10 +352,19 @@ stag:")
                                             (error "no info for type %s" vartype))      
         (setq lis (loop for i in abscope-last-output
                         if (eq (car i) 'LocInfo) collect (cons (cdr (assoc 'Tag (cdr i))) (cdr i))))
-        (setq li (completing-read "jump to:" lis nil t tag 'abscope-find-members-history nil nil))
-        (if (not li)
-            (error "no location chosen"))
-        (setq loc (assoc li lis))
+		(or (> (length lis) 0) (error "no locations found for %s" tag))
+		(setq loc (or
+				  (assoc tag lis)
+				  (if (= (length lis) 1)
+					  (car lis)
+					(progn
+					  (setq li (completing-read "jump to:" lis nil t nil 'abscope-find-members-history nil nil))
+					  (if (not li)
+						  (error "no location chosen"))
+					  (assoc li lis))
+					)
+				  )
+			  )
         )
       )
     (if (not loc)
@@ -470,7 +479,7 @@ stag:")
   )
 (defalias 'abfm 'abscope-find-members)
 (defalias 'fm 'abscope-find-members)
-
+(defalias 'fp 'abscope-find-params)
 (defun abs-choose-result ()
   (let
 	  (
