@@ -1,4 +1,20 @@
-AUTO_EXPR_FUNC(util) ACMD_NAME(TimeSinceSS2000);
+typedef enum Baz
+{
+    Bar_A = 1,
+    Bar_B,
+    // last
+    Bar_C
+} Bar;
+
+void foo()
+{
+    int a = pEnt ? pEnt->n : 0;
+    Foo b = {0};
+    Bar c;
+}
+
+
+/*AUTO_EXPR_FUNC(util) ACMD_NAME(TimeSinceSS2000);
 U32 exprFuncTimeSinceSS2000(U32 iInTime)
 {
 	return timeSecondsSince2000() - iInTime;
@@ -352,3 +368,9 @@ void tf1()
 {
     (*unlock)(lock->accountID, lock->key);
 }
+*/
+
+// Expr parsing:
+
+// leading tok:
+

@@ -2,6 +2,17 @@ typedef struct Foo
 {
     int a;
     char *b;
+    struct 
+    {
+        int sa;
+        char *sb;
+    } anon;
+    struct 
+    {
+        int s2a;
+        char *s2b;
+    } s2;
+        
 } Foo;
 
 typedef struct Bar

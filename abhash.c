@@ -97,6 +97,11 @@ HashNode *hash_findnode(HashTable *ht, char *key)
     
     VALID_HASHTABLE_CHECK(ht);
     
+    if(!ht->cmpfp)
+        ht->cmpfp = strcmp;
+    if(!ht->hashfp)
+        ht->hashfp = str_hashfunc;
+
     hash = ht->hashfp(key, ht->ctxt);
     if(!hash)
     {
