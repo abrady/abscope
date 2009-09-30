@@ -344,6 +344,7 @@ typedef enum c_tokentype
     AUTO_CMD_STRING, // (var,cmd_name)
     AUTO_CMD_SENTENCE,
     AUTO_EXPR_FUNC,  // (UIGen) ACMD_NAME(foo)
+    AUTO_STARTUP,
     ACMD_NAME,       // (foo)
 
     AUTO_ENUM,
@@ -453,13 +454,19 @@ static void c_add_var(CParse *p, StackElt *elt, char *ref, char *func_ctxt)
 static void c_add_cryptic(CParse *p, StackElt *elt, char *ref)
 {
     char buf[sizeof(elt->l.str)];
+    char buf2[sizeof(elt->l.str)];
     char *tmp;
     // a little hacky, but split the line and tag up.
     stracpy(buf,elt->l.str);
     tmp = strchr(buf,':');
     if(tmp)
+    {
         *tmp++ = 0;
-    parse_add_locinfo(&p->cryptic,p->parse_file,elt->lineno,p->line,buf,ref,tmp);
+        stracpy(buf2,tmp);
+    }
+    if(!*buf)
+        stracpy(buf,ref);
+    parse_add_locinfo(&p->cryptic,p->parse_file,elt->lineno,p->line,buf,ref,buf2);
 }
 
 
@@ -536,7 +543,7 @@ static void reduce_to(CParse *p, int to, StackElt *top)
     StackElt tmp;
     if(top)
         tmp = *top;
-    POP_TO(to);
+    POP_TO(to+1);
     r = unget_tok(p);
     if(r)
     {
@@ -724,16 +731,19 @@ static void parse_enum_body(CParse *p, char *enum_typename)
         
         switch(top->tok)
         {
+        case TOK:
+            c_add_enum(p,top->l.str,enum_typename,top->lineno);
+            break;
         case '}': 
         case ',':
-            if(top[-1].tok == TOK)
-                c_add_enum(p,top[-1].l.str,enum_typename,top[-1].lineno);
             if(top->tok == '}')
                 goto done;
             POP_TO(n_stack_in);
             break;
         case '=':
-            parse_expr(p,enum_typename,',','}');
+            if('}' == parse_expr(p,enum_typename,',','}'))
+                goto done;
+            POP_TO(n_stack_in);
             break;
         }
     }
@@ -744,7 +754,7 @@ done:
 // 
 //static void extract_vars(CParse *p, StackElt *s, StackElt *e)
 
-static void parse_initializer(CParse *p, char *ctxt, int term_tok1, int term_tok2);
+static int parse_var_initializer(CParse *p, char *ctxt);
 
 
 static void parse_arglist(CParse *p, char *ctxt)
@@ -806,15 +816,16 @@ static void parse_var_decls(CParse *p, char *ctxt)
             last_tok = top;
             break;
         case '=':
-            parse_initializer(p,ctxt,',',';'); // fall thru
-        case ',':                              // fall thru
+            top->tok = parse_var_initializer(p,ctxt);
+            // fall thru
+        case ',': // fall thru
         case ';': 
             if(last_tok == last_vartype)
                 goto done; // might be single stmt: foo; or ;
             if(last_vartype && last_tok)
                 c_add_structref(p,last_tok,last_vartype->l.str,ctxt);
 
-            if(top->tok == ';' || top->tok == '=')
+            if(top->tok == ';')
             {
                 last_vartype = NULL;
                 POP_TO(n_stack_in);
@@ -884,6 +895,7 @@ static void parse_func_body(CParse *p, char *func_ctxt)
             unget_tok_to(p,n_stack_in);
             parse_expr(p,func_ctxt,';',0);
             POP_TO(n_stack_in);
+            break;
         case DO:
             POP_TO(n_stack_in);
             break;
@@ -1094,8 +1106,9 @@ static void parse_declspec(CParse *p, char *ctxt, int term_tok1, int term_tok2)
 // initializer:  
 //  expr 
 //  '{' initializer (',' initializer)* ','? '}'
-static void parse_initializer(CParse *p, char *ctxt, int term_tok1, int term_tok2)
+static int parse_var_initializer(CParse *p, char *ctxt)
 {
+    int res = 0;
     StackElt *top = NULL;
     int n_stack_in = p->n_stack;    
     int done = 0;
@@ -1103,24 +1116,26 @@ static void parse_initializer(CParse *p, char *ctxt, int term_tok1, int term_tok
     {
         NEXT_TOK();
         
-        if(top->tok == term_tok1 || top->tok == term_tok2)
+        if(top->tok == ';' || top->tok == ',')
+        {
+            res = top->tok;
             break;
+        }
         
         switch(top->tok)
         {
         case TOK:
             unget_tok(p);
-            parse_expr(p,ctxt,term_tok1,term_tok2);
+            res = parse_expr(p,ctxt,';',',');
             done = 1;
             break;
         case '{':
-            while('}' != parse_expr(p,ctxt,',','}'))
-                ;
-            done = 1;
+            parse_expr(p,ctxt,'}',0);
             break;
         }
     } while(!done);
     POP_TO(n_stack_in);
+    return res;
 }
 
 
@@ -1150,26 +1165,29 @@ static void parse_initializer(CParse *p, char *ctxt, int term_tok1, int term_tok
 //
 // ident_list: TOK (',' TOK)*
 //
-static void parse_initdecllist(CParse *p, char *ctxt, StackElt *type, int term_tok)
+static void parse_initdecllist(CParse *p, char *ctxt, char *type)
 {
     StackElt *top = NULL;
     int n_stack_in = p->n_stack;
 
-    while(!type)
+    if(!type)
+        type = "";
+
+    for(;;)
     {
         NEXT_TOK();
 
-        if(top->tok == term_tok)
+        if(top->tok == ';')
             break;
 
         switch(top->tok)
         {
         case '=':
-            parse_initializer(p,ctxt,',',term_tok);
+            parse_var_initializer(p,ctxt);
             POP_TO(n_stack_in);
             break;
         case TOK:
-            c_add_structref(p,top,type->l.str,ctxt);
+            c_add_structref(p,top,type,ctxt);
             POP_TO(n_stack_in);
             break;
         case '(':
@@ -1227,6 +1245,7 @@ int c_parse(CParse *p)
 {
     StackElt *type;
     char ctxt[128];
+    char ctxt2[128];
     StackElt stack[MAX_STACK] = {0}; 
     StackElt *top = NULL;
     int res = 0;
@@ -1247,9 +1266,11 @@ int c_parse(CParse *p)
         case ';':
             unget_tok_to(p,0);
             parse_declspec(p,"global_var",';','=');
-            type = top;
-            if(top->tok)
-                parse_initdecllist(p,"global",type,';');
+            type = get_tok(p);
+            if(IS_INTRINSIC_TYPE(type->tok) || type->tok == TOK)
+                parse_initdecllist(p,"global var",type->l.str);
+            else
+                parse_to_tok(p,';',0);
             POP_TO(0);
             break;
         case '{':
@@ -1274,20 +1295,46 @@ int c_parse(CParse *p)
                 parse_to_tok(p,';',0);
                 POP_TO(0);
             }
-            else if(PREV_TOK(FUNC_HEADER)) // function def
+            else // function def
             {
-                char *func_name = top[-1].l.str;
+                // guess to find function name
+                for(type = top;type >= stack; --type)
+                {
+                    if(type->tok == '(')
+                    {
+                        strcpy(ctxt,type[-1].l.str);
+                        s = ctxt;
+                        break;
+                    }
+                }
 
                 if(p->stack[0].tok==REDUCED_CRYPTIC_AUTO)
                     c_add_cryptic(p,p->stack+0,s);
+                c_add_funcdef(p,top[-1].lineno,s,p->last_line);
 
-                c_add_funcdef(p,top[-1].lineno,func_name,p->last_line);
-                sprintf(ctxt,"func %s",func_name);
-                parse_func_body(p,ctxt);
+                unget_tok_to(p,0);
+                parse_declspec(p,s,'{',0);
+                type = get_tok(p);
+                
+                if(!type)
+                {
+                    parser_error(p,top,"unable to parse this.");
+                    parse_to_tok(p,'}','{');
+                    break;
+                }
+
+                // get back to where we started, parse decl
+                parse_to_tok(p,'(',0);
+                parse_arglist(p,s);
+
+                // parse body
+                parse_to_tok(p,'{',0);
+                sprintf(ctxt2,"func %s",s);
+                parse_func_body(p,ctxt2);
                 POP_TO(0);
             }
             break;
-        case '(':
+        case '{' && 0: // removing
             if(p->n_stack <= 1)
                 break;
             switch (top[-1].tok)
@@ -1296,15 +1343,14 @@ int c_parse(CParse *p)
             {
                 StackElt hdr = {0};
                 char *func_name = top[-1].l.str;
+                int to = top - stack - 1;
                 parse_arglist(p,func_name);
 
                 // reduce to func header
                 hdr.tok = FUNC_HEADER;
                 hdr.lineno = top->lineno;
                 strcpy(hdr.l.str,top[-1].l.str);
-                ZeroStruct(&stack[0]);
-                stack[0] = hdr;
-                POP_TO(1);
+                reduce_to(p,to,&hdr);
             }
             break;
             default:
@@ -1330,8 +1376,11 @@ int c_parse(CParse *p)
         case AUTO_COMMAND_REMOTE_SLOW:
         case AUTO_COMMAND_QUEUED:
         case AUTO_EXPR_FUNC:
+        case AUTO_STARTUP:
         case AUTO_ENUM:
             parse_cryptic_auto_decl(p);
+            top = get_tok(p);
+            reduce_to(p,0,top);
             break;
         default:
             break;
@@ -1356,6 +1405,7 @@ static const KwTokPair kws[] =
     { "AUTO_CMD_STRING",          AUTO_CMD_STRING },
     { "AUTO_CMD_SENTENCE",        AUTO_CMD_SENTENCE },
     { "AUTO_EXPR_FUNC",           AUTO_EXPR_FUNC },
+    { "AUTO_STARTUP",             AUTO_STARTUP },
     { "ACMD_NAME",                ACMD_NAME },
     { "AUTO_ENUM",                AUTO_ENUM },
     { "typedef",                  TYPEDEF },
@@ -1751,7 +1801,6 @@ int c_parse_test()
     TEST(cp.structrefs.n_locs == 15);
 
     // structs
-    TEST(cp.structs.n_locs == 4);
     li = cp.structs.locs + 0;
     TEST(0==strcmp(li->tag,"Foo"));
     TEST(li->referrer == NULL);
@@ -1835,6 +1884,7 @@ int c_parse_test()
 
     INIT_LI(cp.cryptic);
     TEST_LI("test_func_expr",     "test_func",  "AUTO_EXPR_FUNC(UIGen) ACMD_NAME('test_fu");
+    TEST_LI("CommonAlgoTables_Load", "CommonAlgoTables_Load", "AUTO_STARTUP(AlgoTablesCommon);");
     TEST_LI("test_func2_command", "test_func2", "AUTO_COMMAND ACMD_NAME(test_func2_co");
     TEST_LI("Acmd",               "exprAcmd",   "AUTO_EXPR_FUNC(UIGen) ACMD_NAME('Acmd');");
     TEST(li == li_end);    
