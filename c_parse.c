@@ -612,7 +612,7 @@ static void parse_arg_expr(CParse *p, char *ctxt)
     do
     {
         t = parse_expr(p,ctxt,',',')'); // puts last tok on stack
-    } while(t != ')');
+    } while(t && t != ')');
 }
 
 

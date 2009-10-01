@@ -117,6 +117,8 @@ size_t abfwrite(void const *buf, size_t n1, size_t n2, File *f)
 int abgetc(File *f)
 {
     MemFile *mem;
+	if(!f)
+		return EOF;
     switch(f->mode)
     {
     case FileMode_CRT:
