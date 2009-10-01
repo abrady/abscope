@@ -101,6 +101,9 @@ void exprAcmd()
 {
 }
 
+void inv_ent_FixItemIDs(NOCONST(Entity) *pEnt)
+{
+}
 /*
 typedef struct Bar
 {

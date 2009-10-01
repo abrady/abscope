@@ -345,6 +345,7 @@ typedef enum c_tokentype
     AUTO_CMD_SENTENCE,
     AUTO_EXPR_FUNC,  // (UIGen) ACMD_NAME(foo)
     AUTO_STARTUP,
+    NOCONST_DECL,
     ACMD_NAME,       // (foo)
 
     AUTO_ENUM,
@@ -390,7 +391,6 @@ typedef struct StackElt
     int lineno;
 } StackElt;
 
-#define MAX_STACK 256
 
 static LocInfo* c_add_struct(CParse *p, char *struct_name, int lineno)
 {
@@ -476,9 +476,11 @@ int c_lex(CParse *p, StackElt *top);
 static ABINLINE StackElt* get_tok(CParse *p)
 {
     StackElt *top;
-    if(p->n_stack < p->m_stack)
+    if(p->m_stack)
+    {
+        p->stack[p->n_stack] = p->mstack[--p->m_stack];
         return p->stack + p->n_stack++;
-    ++p->m_stack;
+    }
     top = p->stack + p->n_stack++;
     ZeroStruct(top);
     top->tok = c_lex(p,top);
@@ -488,16 +490,7 @@ static ABINLINE StackElt* get_tok(CParse *p)
 static void pop_tok(CParse *p)
 {
     assert(p->n_stack > 0);
-    assert(p->m_stack >= p->n_stack);
-    if(p->m_stack > p->n_stack)
-    {
-        int n = p->m_stack - p->n_stack;
-        StackElt *dst = p->stack + p->n_stack-1;
-        StackElt *src = dst+1;
-        CopyStructs(dst,src,n);
-    }
     p->n_stack--;
-    p->m_stack--;
 }
 
 static void pop_tok_to(CParse *p, int n)
@@ -511,8 +504,8 @@ static StackElt* unget_tok(CParse *p)
 {
     if(p->n_stack <= 0)
         return NULL;
-    assert(p->m_stack >= p->n_stack);
-    return p->stack + --p->n_stack;
+    p->mstack[p->m_stack] = p->stack[--p->n_stack];
+    return p->mstack + p->m_stack++;
 }
 
 // unget to a point on the stck
@@ -553,6 +546,7 @@ static void reduce_to(CParse *p, int to, StackElt *top)
             ZeroStruct(r);
     }
 }
+
 
 static int parser_error(CParse *p, StackElt *s, char *fmt,...)
 {
@@ -1246,12 +1240,14 @@ int c_parse(CParse *p)
     StackElt *type;
     char ctxt[128];
     char ctxt2[128];
-    StackElt stack[MAX_STACK] = {0}; 
+    StackElt  stack[MAX_STACK] = {0}; 
+    StackElt mstack[MAX_STACK] = {0}; 
     StackElt *top = NULL;
     int res = 0;
     char *s;
 
-    p->stack = stack;
+    p->stack  = stack;
+    p->mstack = mstack;
     p->m_stack = 0;
     p->n_stack = 0;
     
@@ -1295,19 +1291,25 @@ int c_parse(CParse *p)
                 parse_to_tok(p,';',0);
                 POP_TO(0);
             }
-            else // function def
+            else if(top[-1].tok == ')') // function def
             {
+                int n_parens = 1;
+
                 // guess to find function name
-                for(type = top;type >= stack; --type)
+                for(type = top-2;type > p->stack && n_parens;--type)
                 {
-                    if(type->tok == '(')
-                    {
-                        strcpy(ctxt,type[-1].l.str);
-                        s = ctxt;
-                        break;
-                    }
+                    if(type->tok == ')')
+                        n_parens++;
+                    else if(type->tok == '(')
+                        n_parens--;
                 }
 
+                if(type > p->stack)
+                {
+                    strcpy(ctxt,type->l.str);
+                    s = ctxt;
+                }
+                
                 if(p->stack[0].tok==REDUCED_CRYPTIC_AUTO)
                     c_add_cryptic(p,p->stack+0,s);
                 c_add_funcdef(p,top[-1].lineno,s,p->last_line);
@@ -1395,7 +1397,7 @@ typedef struct OpTokPair { char kw[4]; int tok;} OpTokPair;
 static const KwTokPair kws[] = 
 {
     { "AUTO_COMMAND",             AUTO_COMMAND },
-//        { "NOCONST",            NOCONST_DECL },
+    { "NOCONST",            NOCONST_DECL },
 //        { "const",              CONST_DECL },
     { "AUTO_COMMAND_REMOTE",      AUTO_COMMAND_REMOTE },
     { "AUTO_COMMAND_REMOTE_SLOW", AUTO_COMMAND_REMOTE_SLOW },
@@ -1475,7 +1477,7 @@ static char const *ignored_kws[] =
     "NN_PTR_GOOD",
     "const",
     "volatile",
-    "EIGNORE"
+    "EIGNORE",
 };
 
 
@@ -1719,6 +1721,7 @@ int c_parse_test()
 {
     int i;
     StackElt stack[MAX_STACK] = {0};
+    StackElt mstack[MAX_STACK] = {0};
     CParse *p = NULL;
     CParse cp = {0};
     CParse cp2 = {0};
@@ -1741,11 +1744,12 @@ int c_parse_test()
     // ----------
     // test stack ops
     p = &cp;
-    p->stack = stack;
+    p->stack  = stack;
+    p->mstack = mstack;
     for(i = 0; i < 10; ++i)
         p->stack[i].tok = i+1;
     p->n_stack = 10;
-    p->m_stack = 10;
+    p->m_stack = 0;
     
     unget_tok_to(p,6);
     POP_TO(1);

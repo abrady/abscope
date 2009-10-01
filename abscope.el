@@ -129,7 +129,13 @@ Ctxt c"
                     )
               )
           )
-    (insert (format "%s [[file:%s::%s][%s]]" prefix File Lineno (or (string-replace-match ".*? " Ctxt "") (file-name-nondirectory File))))
+    ;; 
+    (setq Ctxt
+          (or 
+           (string-replace-match ".*? " Ctxt "")
+           (if (> (length Ctxt) 0) Ctxt nil)
+           (file-name-nondirectory File)))
+    (insert (format "%s [[file:%s::%s][%s]]" prefix File Lineno Ctxt))
     (insert (format "\t%s\n" (stripLeadingWhitespace Line)))
     )
   )

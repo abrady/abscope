@@ -17,6 +17,10 @@
 
 typedef struct StackElt StackElt;
 
+#define MAX_STACK 256
+
+
+
 typedef struct CParse
 {
     Parse structs;
@@ -33,6 +37,7 @@ typedef struct CParse
     
     // state info
     StackElt *stack;
+    StackElt *mstack;
     int m_stack;
     int n_stack;
 

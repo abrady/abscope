@@ -29,7 +29,7 @@ set FLAGS=/RTCscu /ZI  /MTd
 )
 @REM /link /NODEFAULTLIB:MSVCR80D
 @REM /ALLOWISOLATION:NO : turn off manifest look up for some crt library
-cl /analyze:stacksize 32000 /analyze /J /W4 %FLAGS% %INPUTS% /link /ALLOWISOLATION:NO
+cl /analyze:stacksize 38000 /analyze /J /W4 %FLAGS% %INPUTS% /link /ALLOWISOLATION:NO
 
 
 @if NOT "%ERRORLEVEL%"=="0" goto error

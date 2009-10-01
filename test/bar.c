@@ -1,3 +1,7 @@
+void inv_ent_FixItemIDs(NOCONST(Entity) *pEnt)
+{
+}
+
 typedef enum Baz
 {
     Bar_A = 1,
