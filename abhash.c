@@ -177,7 +177,7 @@ void hash_resize(HashTable *ht, int n_new)
         if(j == n_new)
             abassert(0 && "failed to re-hash");
     }
-    free(ht->elts);
+    free_safe(ht->elts);
     ht->elts = new_elts;
     ht->n_elts = n_new;
 }

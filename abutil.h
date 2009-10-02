@@ -156,4 +156,5 @@ void abfree(void *p);
 #define INRANGE(N,S,E) (((N)>=(S)) && ((N)<E))
 #define INRANGE0(N,E) INRANGE(N,0,E)
 #define POW_OF_2(N) (((N) & ((N)-1)) == 0)
+ABINLINE void free_safe(void *p) { if(p) free(p);}
 #endif //ABUTIL_H

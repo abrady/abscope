@@ -7,6 +7,7 @@
  * - build a call tree
  * - logging
  * - find a way to not relocate valid items on the stack when ungetting. 
+ * - parse 0xabcd as a numeric constant
  ***************************************************************************/
 #include "c_parse.h"
 #include "abhash.h"
@@ -466,7 +467,7 @@ static void c_add_cryptic(CParse *p, StackElt *elt, char *ref)
     }
     if(!*buf)
         stracpy(buf,ref);
-    parse_add_locinfo(&p->cryptic,p->parse_file,elt->lineno,p->line,buf,ref,buf2);
+    parse_add_locinfo(&p->cryptic,p->parse_file,elt->lineno,p->line,buf,buf2,ref);
 }
 
 
@@ -1271,7 +1272,7 @@ int c_parse(CParse *p)
             break;
         case '{':
             s = top[-1].l.str;
-            if(PREV_TOKS3(TYPEDEF,STRUCT, TOK)) // struct def
+            if(PREV_TOKS2(STRUCT, TOK)) // struct def
             {
                 LocInfo *l;
 
@@ -1887,10 +1888,10 @@ int c_parse_test()
     TEST(0==strcmp(li->context ,"func test_func3"));
 
     INIT_LI(cp.cryptic);
-    TEST_LI("test_func_expr",     "test_func",  "AUTO_EXPR_FUNC(UIGen) ACMD_NAME('test_fu");
-    TEST_LI("CommonAlgoTables_Load", "CommonAlgoTables_Load", "AUTO_STARTUP(AlgoTablesCommon);");
-    TEST_LI("test_func2_command", "test_func2", "AUTO_COMMAND ACMD_NAME(test_func2_co");
-    TEST_LI("Acmd",               "exprAcmd",   "AUTO_EXPR_FUNC(UIGen) ACMD_NAME('Acmd');");
+    TEST_LI("test_func_expr",       "AUTO_EXPR_FUNC(UIGen) ACMD_NAME('test_fu", "test_func");
+    TEST_LI("CommonAlgoTables_Load", "AUTO_STARTUP(AlgoTablesCommon);", "CommonAlgoTables_Load");
+    TEST_LI("test_func2_command", "AUTO_COMMAND ACMD_NAME(test_func2_co", "test_func2");
+    TEST_LI("Acmd",               "AUTO_EXPR_FUNC(UIGen) ACMD_NAME('Acmd');", "exprAcmd");
     TEST(li == li_end);    
 
     // ----------
