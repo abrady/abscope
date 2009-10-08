@@ -39,7 +39,7 @@ int errorf (ErrorLvl lvl, char *msg, ...);
 
 #define Errorf(MSG,...) errorf(ErrorLvl_Warn,MSG,__VA_ARGS__)
 #define abassertmsg(C,msg,...) (break_if_debugging(),(C)?errorf(ErrorLvl_Fatal,msg,__VA_ARGS__):0)
-#define STATIC_ASSERT(C) extern int (*static_assert_failed())[(x)?1:0]
+#define STATIC_ASSERT(C) extern int (*static_assert_failed())[(C)?1:0]
 
 typedef int S32;
 typedef unsigned int U32;
@@ -50,7 +50,7 @@ typedef volatile unsigned __int64 VU64;
 typedef unsigned char U8;
 typedef signed char S8;
 
-#define ABINLINE __forceinline
+#define ABINLINE static __forceinline
 
 #define _CRT_SECURE_NO_WARNINGS 1
 #include <stdio.h>
@@ -114,7 +114,13 @@ ABINLINE void str_replacechar(char *str, char from, char to) {char *t = str; for
 
 #define DEREF(s,m) ((s)?(s)->m:0)
 #define DEREF2(s,m,m2) ((s)?DEREF((s)->m,m2):0)
-#define MAX(a,b) (((a) > (b))?(a):(b))
+
+#ifndef MIN
+#define MIN(a,b)	(((a)<(b)) ? (a) : (b))
+#define MAX(a,b)	(((a)>(b)) ? (a) : (b))
+#define MINMAX(a,min,max) ((a) < (min) ? (min) : (a) > (max) ? (max) : (a))
+#endif
+
 
 #define SIZEOF_MBR(typ, mbr)   (sizeof(((typ*)0)->mbr))
 #define MBR_OFFSET(typ, mbr)   (intptr_t)&(((typ*)(0))->mbr)

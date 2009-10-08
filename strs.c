@@ -253,3 +253,21 @@ int strpool_test(void)
     printf("done.\n");
     return 0;
 }
+
+U32 hexify_chars(char a, char b, char c, char d)
+{
+#if __BIG_ENDIAN
+    return ((a<<24)|(b<<16)|(c<<8)|d);
+#else
+    return ((d<<24)|(c<<16)|(b<<8)|a);
+#endif
+}
+
+U32 hexify_str(char *s) 
+{
+    char a = s?s[0]:0; 
+    char b = s&&s[0]?s[1]:0; 
+    char c = (s&&s[0]&&s[1])?s[2]:0; 
+    char d = (s&&s[0]&&s[1]&&s[2])?s[3]:0; 
+    return hexify_chars(a,b,c,d);
+}

@@ -9,6 +9,14 @@
  * - re-add shared-stack code.
  * - parse 0xabcd as a numeric constant
  * - remove peek_tok just to make it consistant
+ * 
+ * performance: 
+ * - writing out file top offender
+ * -- fwrite_nolock 18%
+ * -- absfile_write_parse 17%
+ * -- fwrite 12%
+ * - memcpy 7%
+ * - RtlEnterCriticalSection/RtlLeaveCriticalSection ~30%
  ***************************************************************************/
 #include "c_parse.h"
 #include "abhash.h"
@@ -475,11 +483,11 @@ static void c_add_cryptic(CParse *p, StackElt *elt, char *ref)
 int c_debug;
 int c_lex(CParse *p, StackElt *top);
 
- static ABINLINE StackElt* get_tok(CParse *p)
- {
-     StackElt *top;
+ABINLINE StackElt* get_tok(CParse *p)
+{
+    StackElt *top;
     if(p->n_stack < p->m_stack)
-         return p->stack + p->n_stack++;
+        return p->stack + p->n_stack++;
     ++p->m_stack;
     top = p->stack + p->n_stack++;
     ZeroStruct(top);
@@ -577,7 +585,7 @@ static int parser_error(CParse *p, StackElt *s, char *fmt,...)
 
 // matches pairing tokens like '{' and '}'
 // doesn't use stack for error cases
-static ABINLINE void parse_to_tok(CParse *p, int tok, int open_tok)
+ABINLINE void parse_to_tok(CParse *p, int tok, int open_tok)
 {
     StackElt *top = 0;
     int n_open = 1;

@@ -21,7 +21,7 @@
 // 1. It will not work incrementally.
 // 2. It will not produce the same results on little-endian and big-endian
 //    machines.
-static ABINLINE U32 MurmurHash2( char* key, U32 len, U32 seed )
+ABINLINE U32 MurmurHash2( char* key, U32 len, U32 seed )
 {
 	// 'm' and 'r' are mixing constants generated offline.
 	// They're not really 'magic', they just happen to work well.

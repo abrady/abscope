@@ -17,6 +17,11 @@ static S64 locinfo_parse_find_add_str_timer = 0;
 #define LOCINFO_TIMER_START TIMER_START
 #define LOCINFO_TIMER_END() TIMER_END(locinfo_timer)
 
+#define TYPE_T LocInfo
+#include "abarrayx.h"
+#include "abarrayx.c"
+#undef TYPE_T
+
 static void locinfo_cleanup(LocInfo *l)
 {
     free(l->tag);
@@ -27,7 +32,7 @@ static void locinfo_cleanup(LocInfo *l)
 }
 
 
-static ABINLINE int locinfo_write_eachfield(File *fp, LocInfo *l)
+ABINLINE int locinfo_write_eachfield(File *fp, LocInfo *l)
 {
     int i;
     int res = 0;
@@ -51,7 +56,7 @@ static ABINLINE int locinfo_write_eachfield(File *fp, LocInfo *l)
     return res;
 }
 
-static ABINLINE int locinfo_read_eachfield(File *fp, LocInfo *l)
+ABINLINE int locinfo_read_eachfield(File *fp, LocInfo *l)
 {
     int i;
     int res = 0;
@@ -194,7 +199,6 @@ int absfile_write_parse(char *fn, Parse *p)
 int absfile_read_parse(char *fn, Parse *p)
 {
     int i;
-    int n_alloc;
     File*fp = absfile_open_read(fn);
     TIMER_START();
 
@@ -207,9 +211,7 @@ int absfile_read_parse(char *fn, Parse *p)
 
 
     abfread(&p->n_locs,sizeof(p->n_locs),1,fp);
-    n_alloc = sizeof(*p->locs)*p->n_locs;
-    p->locs = realloc(p->locs,n_alloc);
-    ZeroStructs(p->locs,p->n_locs);
+    LocInfo_setsize(&p->locs,p->n_locs);
     for(i = 0; i < p->n_locs; ++i)
     {
         LocInfo *l = p->locs + i;
@@ -317,15 +319,14 @@ int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *ta
         ctxt = buf;
     }
     
-    p->locs    = realloc(p->locs,sizeof(*p->locs)*(++p->n_locs));
-    l          = p->locs+p->n_locs-1;
-    ZeroStruct(l);
-    l->tag     = parse_find_add_str(p,tag);
-    l->referrer= parse_find_add_str(p,referrer);
-    l->context = parse_find_add_str(p,ctxt);
-    l->file    = parse_find_add_str(p,filename);
-    l->lineno  = lineno;
-    l->line    = parse_find_add_str(p,line);
+    p->n_locs++;
+    l           = LocInfo_push(&p->locs);
+    l->tag      = parse_find_add_str(p,tag);
+    l->referrer = parse_find_add_str(p,referrer);
+    l->context  = parse_find_add_str(p,ctxt);
+    l->file     = parse_find_add_str(p,filename);
+    l->lineno   = lineno;
+    l->line     = parse_find_add_str(p,line);
 
     TIMER_END(locinfo_timer);
     return l - p->locs;

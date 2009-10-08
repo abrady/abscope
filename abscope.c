@@ -78,11 +78,13 @@ File *absfile_open_read(char *fn)
 
 #define TEST(COND) if(!(COND)) {printf("%s(%d):"#COND ": failed\n",__FILE__,__LINE__); break_if_debugging(); return -1;}
 
+extern int abarray_test();
 
 static int abscope_test()
 {
     printf("TESTING\n");
 
+    TEST(0==abarray_test());
     TEST(0==avltree_test());
     TEST(0==hash_test()); 
     TEST(0==strpool_test());

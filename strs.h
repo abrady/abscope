@@ -45,4 +45,9 @@ char* str_catf (char **dst, char *fmt, ...);
 char* str_vcatf(char **dst,char *fmt,va_list args);
 
 
+// turn the first four bytes of a string into a U32
+U32 hexify_chars(char a, char b, char c, char d);
+U32 hexify_str(char *s);
+
+
 #endif //STRS_H

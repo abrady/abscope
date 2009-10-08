@@ -20,7 +20,7 @@ call "c:/Microsoft Visual Studio 8/VC/bin/vcvars32.bat"
 @REM /Og: global opt
 
 @set LIBS= kernel32.lib pcre.lib /D PCRE_STATIC
-@set INPUTS= %LIBS% abscope.c locinfo.c c_parse.c strs.c abutil.c abtree.c abhash.c abfile.c
+@set INPUTS= %LIBS% abscope.c locinfo.c c_parse.c strs.c abutil.c abtree.c abhash.c abfile.c abarray.c
 @REM for real speed: /MD vs. /MT ? (single threaded vs. multi crt?)
 @IF /I "%opt%" EQU "Y" (
 set FLAGS=/O2 /Oi /Zi /MT

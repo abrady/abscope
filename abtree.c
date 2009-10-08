@@ -15,7 +15,7 @@
 // n : former parent that was rotated left or right
 // r : var rotated to parent of n
 // c : child of r that is now a child of n
-static ABINLINE void avltree_rotfixup(AvlTree *t, AvlNode *r, AvlNode *n, AvlNode *c)
+ABINLINE void avltree_rotfixup(AvlTree *t, AvlNode *r, AvlNode *n, AvlNode *c)
 {
     // fixup new root of this subtree
     if(n == t->root) // special case for root
