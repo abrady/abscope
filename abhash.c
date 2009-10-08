@@ -85,10 +85,9 @@ U32 str_hashfunc(char *str, void *ctxt)
         return 0;                                               \
     }
 
-HashNode *hash_findnode(HashTable *ht, char *key)
+HashNode *hash_findnode_prehash(HashTable *ht, char *key,U32 hash)
 {
     int i;
-    U32 hash;
     int off;
     HashNode *n;
     
@@ -99,10 +98,6 @@ HashNode *hash_findnode(HashTable *ht, char *key)
     
     if(!ht->cmpfp)
         ht->cmpfp = strcmp;
-    if(!ht->hashfp)
-        ht->hashfp = str_hashfunc;
-
-    hash = ht->hashfp(key, ht->ctxt);
     if(!hash)
     {
         fprintf(stderr,"key didn't make a hash value\n");
@@ -121,6 +116,15 @@ HashNode *hash_findnode(HashTable *ht, char *key)
     }
     return NULL;
 }
+
+HashNode *hash_findnode(HashTable *ht, char *key)
+{
+    int hash;
+    if(!ht->hashfp)
+        ht->hashfp = str_hashfunc;
+    hash = ht->hashfp(key, ht->ctxt);
+    return hash_findnode_prehash(ht,key,hash);
+}   
 
 void *hash_find(HashTable *ht, char *key)
 {

@@ -6,8 +6,9 @@
  * todo:
  * - build a call tree
  * - logging
- * - find a way to not relocate valid items on the stack when ungetting. 
+ * - re-add shared-stack code.
  * - parse 0xabcd as a numeric constant
+ * - remove peek_tok just to make it consistant
  ***************************************************************************/
 #include "c_parse.h"
 #include "abhash.h"
@@ -1337,31 +1338,6 @@ int c_parse(CParse *p)
                 POP_TO(0);
             }
             break;
-        case '{' && 0: // removing
-            if(p->n_stack <= 1)
-                break;
-            switch (top[-1].tok)
-            {
-            case TOK: // func call
-            {
-                StackElt hdr = {0};
-                char *func_name = top[-1].l.str;
-                int to = top - stack - 1;
-                parse_arglist(p,func_name);
-
-                // reduce to func header
-                hdr.tok = FUNC_HEADER;
-                hdr.lineno = top->lineno;
-                strcpy(hdr.l.str,top[-1].l.str);
-                reduce_to(p,to,&hdr);
-            }
-            break;
-            default:
-                parse_to_tok(p,')','(');
-                POP_TO(0); // dunno what this is
-                break;
-            }
-            break;
         case '=':
             // todo: some kind of global var init
             parse_to_tok(p,';',0);
@@ -1485,12 +1461,15 @@ static char const *ignored_kws[] =
 // todo: parse '==' properly
 int c_lex(CParse *p, StackElt *top)
 {
+    static HashTable tok_from_kw = {0};
+    U32 hash;
     int c;
-    char tok[4096];
+    char tok[4096] = {0};
     char *i;
     int j;
     int newline;
     S64 timer_start = timer_get();
+    
 //    S64 timer_getc;
 // timing each getch call has too much overhead
 // #define GETC() ((timer_getc = timer_get()),(p->line[(p->i_line++)%DIMOF(p->line)] = (char)(c = getc(p->fp))),(p->getc_timing += timer_diff(timer_getc)),c)
@@ -1502,6 +1481,11 @@ int c_lex(CParse *p, StackElt *top)
         return VAL;                                                 \
     }
 
+    if(!tok_from_kw.elts)
+    {
+        for(j = 0; j < DIMOF(kws); ++j)
+            hash_insert(&tok_from_kw,kws[j].kw,(void*)kws[j].tok);
+    }
 // think of the gotos as a tail recursion, otherwise
 // every comment, preprocessor, etc. would push unnecessary
 // contxt onto the stack.
@@ -1641,9 +1625,17 @@ yylex_start:
     }
 
     // parse the token
-    UNGETC();
-    while(isalnum(GETC()) || c == '_')
+    //UNGETC();
+    // isalnum : funcall overhead too expensive
+    while((c>='0'&&c<='9') 
+          || (c>='A'&&c<='Z') 
+          || (c>='a'&&c<='z') 
+          || c == '_')
+    {
         *i++ = (char)c;
+        GETC();
+    }
+    
     *i = 0;
     if(!*tok) // no characters grabbed. return
     {
@@ -1690,6 +1682,8 @@ yylex_start:
     
     UNGETC();
 
+    hash = tok_from_kw.hashfp(tok,tok_from_kw.ctxt);
+    
     for(j = 0; j < DIMOF(ignored_kws); ++j)
         if(0 == strcmp(tok,ignored_kws[j]))
             goto yylex_start;
@@ -1697,11 +1691,12 @@ yylex_start:
     stracpy(top->l.str,tok);
     for(j = 0; j < sizeof(kws)/sizeof(*kws); ++j)
     {
-        if(0 == strcmp(kws[j].kw,tok))
+        HashNode *n = hash_findnode_prehash(&tok_from_kw,tok,hash);
+        if(n)
         {
             if(c_debug)
                 fprintf(stderr,"keyword(%s)\n",tok);
-            LEX_RET(kws[j].tok);
+            LEX_RET((int)n->p);
         }
     }
     if(c_debug)

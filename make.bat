@@ -37,6 +37,8 @@ cl /analyze:stacksize 38000 /analyze /J /W4 %FLAGS% %INPUTS% /link /ALLOWISOLATI
 @echo "done"
 goto end
 
+symstore add /r /f *.* /s c:\symbols /t "foo" /v "1" /c "test"
+
 :error
 @echo "something gone wrong"
 

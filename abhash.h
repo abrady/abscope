@@ -32,6 +32,7 @@ typedef void (HashCleanupFp)(HashNode *n, void *ctxt);
 
 
 HashNode *hash_findnode(HashTable *ht, char *key);
+HashNode *hash_findnode_prehash(HashTable *ht, char *key, U32 hash);
 void     *hash_find(HashTable *ht, char *key);
 BOOL      hash_exists(HashTable *ht, char *key);
 BOOL      hash_insert(HashTable *ht, char *key, void *p);
