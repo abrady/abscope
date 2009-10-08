@@ -37,7 +37,6 @@ typedef struct CParse
     
     // state info
     StackElt *stack;
-    StackElt *mstack;
     int m_stack;
     int n_stack;
 

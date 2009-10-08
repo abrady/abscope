@@ -475,14 +475,12 @@ static void c_add_cryptic(CParse *p, StackElt *elt, char *ref)
 int c_debug;
 int c_lex(CParse *p, StackElt *top);
 
-static ABINLINE StackElt* get_tok(CParse *p)
-{
-    StackElt *top;
-    if(p->m_stack)
-    {
-        p->stack[p->n_stack] = p->mstack[--p->m_stack];
-        return p->stack + p->n_stack++;
-    }
+ static ABINLINE StackElt* get_tok(CParse *p)
+ {
+     StackElt *top;
+    if(p->n_stack < p->m_stack)
+         return p->stack + p->n_stack++;
+    ++p->m_stack;
     top = p->stack + p->n_stack++;
     ZeroStruct(top);
     top->tok = c_lex(p,top);
@@ -492,7 +490,16 @@ static ABINLINE StackElt* get_tok(CParse *p)
 static void pop_tok(CParse *p)
 {
     assert(p->n_stack > 0);
-    p->n_stack--;
+    assert(p->m_stack >= p->n_stack);
+    if(p->m_stack > p->n_stack)
+    {
+        int n = p->m_stack - p->n_stack;
+        StackElt *dst = p->stack + p->n_stack-1;
+        StackElt *src = dst+1;
+        CopyStructs(dst,src,n);
+    }
+     p->n_stack--;
+    p->m_stack--;
 }
 
 static void pop_tok_to(CParse *p, int n)
@@ -506,8 +513,8 @@ static StackElt* unget_tok(CParse *p)
 {
     if(p->n_stack <= 0)
         return NULL;
-    p->mstack[p->m_stack] = p->stack[--p->n_stack];
-    return p->mstack + p->m_stack++;
+    assert(p->m_stack >= p->n_stack);
+    return p->stack + --p->n_stack;
 }
 
 // unget to a point on the stck
@@ -1242,14 +1249,12 @@ int c_parse(CParse *p)
     StackElt *type;
     char ctxt[128];
     char ctxt2[128];
-    StackElt  stack[MAX_STACK] = {0}; 
-    StackElt mstack[MAX_STACK] = {0}; 
+    StackElt stack[MAX_STACK] = {0}; 
     StackElt *top = NULL;
     int res = 0;
     char *s;
 
     p->stack  = stack;
-    p->mstack = mstack;
     p->m_stack = 0;
     p->n_stack = 0;
     
@@ -1717,7 +1722,6 @@ int c_parse_test()
 {
     int i;
     StackElt stack[MAX_STACK] = {0};
-    StackElt mstack[MAX_STACK] = {0};
     CParse *p = NULL;
     CParse cp = {0};
     CParse cp2 = {0};
@@ -1741,11 +1745,10 @@ int c_parse_test()
     // test stack ops
     p = &cp;
     p->stack  = stack;
-    p->mstack = mstack;
     for(i = 0; i < 10; ++i)
         p->stack[i].tok = i+1;
     p->n_stack = 10;
-    p->m_stack = 0;
+    p->m_stack = 10;
     
     unget_tok_to(p,6);
     POP_TO(1);
