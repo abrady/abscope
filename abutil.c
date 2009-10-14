@@ -7,6 +7,7 @@
  *
  ***************************************************************************/
 #include "abutil.h"
+#include "memwatch.h"
 #include "dirent.h"
 
 int file_exists(char *fname)
@@ -48,7 +49,7 @@ void scan_dir(DirScan *d, const char *adir, int recurse_dir,dirscan_fp add_file_
             if (recurse_dir && S_ISDIR(buf.st_mode) )
                 scan_dir(d, path, recurse_dir, add_file_callback, callback_ctxt);
             else if (_access(path, R_OK) == 0 && (!add_file_callback || add_file_callback(path, callback_ctxt)))
-                strs_find_add_str(&d->files,&d->n_files,_strdup(path));
+                strs_find_add_str(&d->files,&d->n_files,strdup(path));
 		}
 		closedir(dirfile);
 	}
@@ -167,4 +168,11 @@ int errorf(int lvl, char *fmt, ...)
     r = errorfv(lvl,fmt,vl);
     va_end(vl);
     return r;
+}
+
+void abinit(void)
+{
+//     mwInit(); 
+    mwStatistics(MW_STAT_MODULE); // MW_STAT_LINE
+//    mwAutoCheck(1); // ab: if testing, enable?
 }

@@ -86,6 +86,7 @@ typedef enum CQueryFlag
 int c_findstructs(CParse *cp, char *sn);
 int c_findfuncs(CParse *cp, char *name);
 int c_query(CParse *cp, char *tag, int query_flags);
+void c_parse_cleanup(CParse *p);
 
 void c_parse_print_time();
 extern int c_debug;

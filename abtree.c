@@ -139,6 +139,8 @@ void avltree_insert(AvlTree *t, void *p)
             n = &((*n)->right);
     }
     (*n) = calloc(sizeof(AvlNode),1);
+    if(!*n)
+        return;
     (*n)->p = p;
     (*n)->up = up;
     avltree_rebalance(t,(*n));
@@ -271,6 +273,12 @@ static int test_valid_node(AvlTree *t, AvlNode *n)
 }
 #define TEST_NODE(N) TEST(0==test_valid_node(&t,N))
 
+void strdup_free(void *s)
+{
+	free(s);
+}
+
+
 int avltree_test()
 {
     int i;
@@ -356,7 +364,8 @@ int avltree_test()
     for(i = 0; i<100; ++i)
     {
         sprintf(c,"%.2d",i);
-        avltree_insert(&t,_strdup(c)); 
+		free(strdup(c));
+        avltree_insert(&t,strdup(c)); 
         TEST((n = avltree_findnode(&t,c)));
         TEST_NODE(n);
     }
@@ -370,7 +379,7 @@ int avltree_test()
 
     sprintf(c,"0");
     avltree_traverse(&t,avlnode_traverse_test,c);
-    avltree_cleanup(&t,free);
+    avltree_cleanup(&t,strdup_free);
     printf("done\n");
     return 0;
 }

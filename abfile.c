@@ -23,9 +23,21 @@ File *MemFile_load(char const *fn)
     }
     
     f = calloc(sizeof(*fp),1);
+    if(!f)
+    {
+        fclose(fp);
+        return NULL;
+    }
+            
     f->mode = FileMode_Mem;
     f->fp.mem.n = n;
     f->fp.mem.p = malloc(n);
+    if(!f->fp.mem.p)
+    {
+        fclose(fp);
+        return NULL;
+    }
+
     if(1 != fread(f->fp.mem.p,n,1,fp))
     {
         free(f->fp.mem.p);
@@ -53,6 +65,8 @@ File *abfopen(char const *fn,FileFlags mode)
     *m++ = 'b';
     *m++ = 0;
     fp = calloc(sizeof(*fp),1);
+    if(!fp)
+        return NULL;
     fp->mode = FileMode_CRT;
     fp->fp.crt = fopen(fn,mode_str);
     if(!fp->fp.crt)

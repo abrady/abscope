@@ -7,7 +7,8 @@
  * - add some measurement of performance problems (e.g. probe miss) 
  ***************************************************************************/
 #include "abhash.h"
-
+#pragma warning(push)
+#pragma warning(disable:6011)
 //-----------------------------------------------------------------------------
 // MurmurHash2, by Austin Appleby
 
@@ -282,7 +283,7 @@ int hash_test()
         char tmp[16];
         char *t;
         sprintf(tmp,"%.3i",i);
-        t = _strdup(tmp);
+        t = strdup(tmp);
         TEST(hash_insert(ht,t,t));
         TEST(!hash_insert(ht,t,t));
         TEST(hash_exists(ht,t));
@@ -300,3 +301,5 @@ int hash_test()
     }
     return 0;
 }
+
+#pragma warning(pop)

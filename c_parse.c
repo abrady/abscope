@@ -6,9 +6,7 @@
  * todo:
  * - build a call tree
  * - logging
- * - re-add shared-stack code.
  * - parse 0xabcd as a numeric constant
- * - remove peek_tok just to make it consistant
  * 
  * performance: 
  * - writing out file top offender
@@ -81,7 +79,7 @@ static void fixup_refs(Parse *c, Parse *p)
     {
         LocInfo *l = c->locs + i;
         LocInfo *q;
-        q = hash_find(&ht,l->referrer);
+        q = *l->referrer ? hash_find(&ht,l->referrer) : NULL;
         if(!q)
             continue;
         l->ref = q;
@@ -540,13 +538,6 @@ static StackElt* unget_tok_to(CParse *p, int to)
     return r;
 }
 
-static StackElt* peek_tok(CParse *p)
-{
-    StackElt *res = get_tok(p);
-    unget_tok(p);
-    return res;
-}
-
 static void reduce_to(CParse *p, int to, StackElt *top)
 {
     StackElt* r;
@@ -875,7 +866,6 @@ done:
 // stmt
 static void parse_func_body(CParse *p, char *func_ctxt)
 {
-    StackElt *peek = NULL;
     StackElt *top = NULL;
     int n_stack_in = p->n_stack;
     StackElt *beg = p->stack + n_stack_in;
@@ -912,10 +902,12 @@ static void parse_func_body(CParse *p, char *func_ctxt)
             break;
         case WHILE:
         case IF:
-            peek = peek_tok(p);
-            if(DEREF(peek,tok) != '(')
+            top = get_tok(p);
+            if(DEREF(top,tok) != '(')
+            {
+                unget_tok(p);
                 break;
-            NEXT_TOK();
+            }
             parse_expr(p,func_ctxt,')',0);
             POP_TO(n_stack_in);
             break;
@@ -923,10 +915,12 @@ static void parse_func_body(CParse *p, char *func_ctxt)
             POP_TO(n_stack_in);
             break;
         case FOR:
-            peek = peek_tok(p);
-            if(DEREF(peek,tok) != '(')
+            top = get_tok(p);
+            if(DEREF(top,tok) != '(')
+            {
+                unget_tok(p);
                 break;
-            get_tok(p);
+            }
             // for(a;b;c)
             parse_expr(p,func_ctxt,';',0);
             parse_expr(p,func_ctxt,';',0);
@@ -1928,4 +1922,17 @@ int c_parse_test()
     // TODO: do a final lineno test
 
     return 0;
+}
+
+void c_parse_cleanup(CParse *p)
+{
+	parse_cleanup(&p->structs);
+	parse_cleanup(&p->structrefs);
+	parse_cleanup(&p->funcs);
+	parse_cleanup(&p->funcrefs);
+	parse_cleanup(&p->defines);
+	parse_cleanup(&p->enums);
+	parse_cleanup(&p->vars);
+	parse_cleanup(&p->srcfiles);
+	parse_cleanup(&p->cryptic);
 }
