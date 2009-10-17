@@ -10,6 +10,7 @@
 #define C_PARSE_H
 
 #include "abscope.h"
+#include "locinfo.h"
 
 #include "string.h"
 #include "stdio.h"
@@ -72,20 +73,18 @@ int c_load(CParse *cp);
 typedef enum CQueryFlag
 {
     CQueryFlag_None       = 0,     // search for Foo matches:
-    CQueryFlag_Structs    = 1<<1,  // struct Foo {}; enum Foo {}; 
-    CQueryFlag_Structrefs = 1<<2,  // Foo a;
-    CQueryFlag_Funcs      = 1<<3,  // int foo() {}
-    CQueryFlag_Funcrefs   = 1<<4,  // int bar() { foo(); }
-    CQueryFlag_Defines    = 1<<6,  // #define FOO
-    CQueryFlag_Enums      = 1<<7,  // enum Bar { FOO } Foo;
-    CQueryFlag_Srcfile    = 1<<8,  // foo.c
-    CQueryFlag_Vars       = 1<<9,  
-    CQueryFlag_Cryptic    = 1<<10, 
+    CQueryFlag_Structs    = 1<<0,  // struct Foo {}; enum Foo {}; 
+    CQueryFlag_Structrefs = 1<<1,  // Foo a;
+    CQueryFlag_Funcs      = 1<<2,  // int foo() {}
+    CQueryFlag_Funcrefs   = 1<<3,  // int bar() { foo(); }
+    CQueryFlag_Defines    = 1<<4,  // #define FOO
+    CQueryFlag_Enums      = 1<<5,  // enum Bar { FOO } Foo;
+    CQueryFlag_Srcfile    = 1<<6,  // foo.c
+    CQueryFlag_Vars       = 1<<7,  
+    CQueryFlag_Cryptic    = 1<<8,
 } CQueryFlag;
 
-int c_findstructs(CParse *cp, char *sn);
-int c_findfuncs(CParse *cp, char *name);
-int c_query(CParse *cp, char *tag, int query_flags);
+int c_query(CParse *cp, char *tag, int query_flags, LocInfoField flds); 
 
 void c_parse_print_time();
 extern int c_debug;

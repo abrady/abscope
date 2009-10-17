@@ -16,7 +16,7 @@
 
 (defun abs-follow-link-hook ()
   "what do do after an abscope link is followed by org mode"
-  (push-mark)
+  ;;(push-mark)
   )
 
 
@@ -27,6 +27,37 @@
 (defvar abscope-tq     nil "the command-response queue for each process")
 (make-variable-buffer-local 'abscope-tq)
 (make-variable-buffer-local 'abscope-process)
+
+(defvar abscope-loc-stack '() "the process for each project")
+(make-variable-buffer-local 'abscope-loc-stack)
+
+(defun abscope-push-loc ()
+  "push the current point on the abscope list"
+  (interactive)
+  (let
+	  ((m (point-marker)))
+	(with-current-buffer (abscope-file)
+	  (setq abscope-loc-stack (cons m abscope-loc-stack ))
+	  )
+	)
+  )
+
+
+(defun abscope-pop-loc ()
+  "pop to the last pushed abscope location"
+  (interactive)
+  (let
+	  ((m))
+	(with-current-buffer (abscope-file)
+	  (setq m (pop abscope-loc-stack))
+	  )
+	(switch-to-buffer (marker-buffer m))
+	(goto-char (marker-position m))
+	)
+  )
+
+(defalias 'abp 'abscope-pop-loc)
+
 
 (defun abscope-file ()
   "get the buffer for abscope given the context"
@@ -87,6 +118,8 @@
   (setq abscope-last-output (eval (read str)))
   )
 
+;;(setq foo '(1 2 3))
+;;(pop (reverse foo))
 ;; (setq foo-str "'(
 ;; (LocInfo 
 ;;   (File . \"a b\")
@@ -184,7 +217,7 @@ Ctxt c"
     )
   )
 
-(defun abs-query (type tag)
+(defun abs-query (type fields tag)
   "fundamental function for queueing a request."
   (with-current-buffer (abscope-file)
     (abscope-re-launch)
@@ -195,13 +228,13 @@ Ctxt c"
     (insert "\n\n* " tag)
     (set-marker (process-mark abscope-process) (point))
 
-    (tq-enqueue abscope-tq (concat "Query " type " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output)
+    (tq-enqueue abscope-tq (concat "Query " type " " (or fields "a") " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output)
     (abs-proc-wait-once)
     (tq-process-buffer abscope-tq)
     )
 )
 
-(defun abscope-query (type tag)
+(defun abscope-query (type tag &optional fields)
   "query a tag by type. uses pcre syntax:
 - ? : for shortest match.
    1. \\b Match a word boundary
@@ -214,7 +247,7 @@ Ctxt c"
   (interactive "s (s)truct (S)tructref (f)unc (F)uncref:
 stag:")
   (iswitchb-visit-buffer (abscope-file))
-  (abs-query type tag)
+  (abs-query type fields tag)
   )
 
 
@@ -251,6 +284,12 @@ stag:")
   "find a  cryptic def"
   (interactive (list (read-string "cryptic to search for:" (readWordOrRegion))))
   (abscope-query "p" tag)
+  )
+
+(defun abqx (tag)
+  "find everything with 'tag' in its context def"
+  (interactive (list (read-string "context to search for:" (readWordOrRegion))))
+  (abscope-query "a" tag "x")
   )
 
 (defun abqd (tag)
@@ -340,7 +379,7 @@ stag:")
     )
   )
 
-(defun abscope-jump(tag flags)
+(defun abscope-jump(tag flds flags)
   (interactive (list (read-string "tag:" (readWordOrRegion))
                (read-string "flags (s)truct (f)unc:" "a" 'abscope-find-members-history)))
   (interactive)
@@ -351,9 +390,10 @@ stag:")
        (lis)
        )
     (save-window-excursion
+	  (abscope-push-loc)
       (with-current-buffer (abscope-file)
         (setq abscope-last-output nil)
-        (abs-query flags tag) ;; this logs the history as well as provides the info
+        (abs-query flags nil tag) ;; this logs the history as well as provides the info
         (abs-proc-wait-until-done)      (if (not abscope-last-output) 
                                             (error "no info for type %s" vartype))      
         (setq lis (loop for i in abscope-last-output
@@ -389,9 +429,9 @@ stag:")
   (abscope-jump tag "s"))
           
 (defun abjf (tag)
-  "jump func"
+  "jump to func/define"
   (interactive (list (read-string "func:" (readWordOrRegion))))
-  (abscope-jump tag "f"))
+  (abscope-jump tag "fd"))
 
 (defun abjc (tag)
   "jump srcfile"
@@ -434,6 +474,9 @@ stag:")
 (defvar abs-find-members-history)
 (defvar abs-find-members-last-type)
 
+(make-variable-buffer-local 'abs-find-members-history)
+(make-variable-buffer-local 'abs-find-members-last-type)
+
 (defun abs-nearest-tag ()
   "helper for finding a previous tag"
   (save-excursion
@@ -462,7 +505,7 @@ stag:")
       (setq abscope-last-output nil)
       (save-window-excursion
         (with-current-buffer (abscope-file)
-          (abs-query "s" vartype)
+          (abs-query "s" nil vartype)
           (abs-proc-wait-until-done)
           (if (not abscope-last-output)
               (error "no info for type %s" vartype))
@@ -516,7 +559,7 @@ stag:")
 	(if (not funcname)
 		(error "no func found"))
 	(with-current-buffer (abscope-file)	  
-	  (abs-query "fd" (format "\\b%s\\b" funcname))
+	  (abs-query "fd" nil (format "\\b%s\\b" funcname))
 	  (abs-proc-wait-until-done)
 	  (if (not abscope-last-output)
 		  (error "no info for func %s" funcname))

@@ -12,6 +12,16 @@
 #include "abscope.h"
 #include "strs.h"
 
+typedef enum LocInfoField
+{
+	LocInfoField_None	  = 0,
+	LocInfoField_tag	  = 1<<0,
+	LocInfoField_referrer = 1<<1,
+	LocInfoField_context  = 1<<2,
+	LocInfoField_file	  = 1<<3,
+	LocInfoField_line	  = 1<<4,
+} LocInfoField;
+
 // example LocInfos:
 // typedef struct Foo // tag = Foo, ref = NULL, ctxt = struct Foo,
 // {
@@ -87,12 +97,11 @@ int parse_add_locinfof(Parse *p,char *filename, int lineno, char *line, char *ta
 int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context,va_list args);
 int parse_locinfos_from_ref(Parse *p, char *ref, LocInfo ***res);
 int parse_locinfos_from_context(Parse *p, char *ref, LocInfo ***res);
-int parse_print_search_tag(Parse *p,char *tag);
+int parse_print_search(Parse *p,char *tag, LocInfoField flds);
 void parse_cleanup(Parse *p);
 
 void locinfo_print_time();
-
-
+int locinfo_fields_from_str(char *s);
 
 int test_locinfo(void);
 
