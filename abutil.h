@@ -20,14 +20,16 @@
 
 #ifdef _DEBUG 
 #include <winbase.h>  // for IsDebuggerPresent
-#define break_if_debugging() ((IsDebuggerPresent())?DebugBreak(),1:1)
-
+#define MEMWATCH
+#include "memwatch.h"
+#define break_if_debugging() { static int skip_this_bp = 0; ((!skip_this_bp && (IsDebuggerPresent()))?DebugBreak(),1:1); }
+#pragma warning(disable:6308) // realloc returns NULL
 #else
 
 #define break_if_debugging() 0
 #endif
 
-#define abassert(C) (break_if_debugging(),assert(C))
+#define abassert(C) {break_if_debugging();assert(C);}
 typedef enum ErrorLvl
 {
     ErrorLvl_None,
@@ -95,6 +97,9 @@ typedef struct DirScan
     int n_files;
 } DirScan;
 
+void abinit(void);
+
+
 int file_exists(char *fname);
 char *fname_nodir(char *fname);
 
@@ -141,7 +146,7 @@ double timer_diffelapsed(S64 timer);
 #define TIMER_END(DEST) DEST += timer_diff(timer_start);
 
 
-#define TIME_ALLOCS
+// #define TIME_ALLOCS
 #ifdef TIME_ALLOCS
 double alloc_time();
 void *abmalloc (size_t size);

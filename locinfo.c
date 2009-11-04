@@ -28,6 +28,7 @@ static void locinfo_cleanup(LocInfo *l)
     free(l->referrer);
     free(l->context);
     free(l->file);
+	parse_cleanup(l->child);
     ZeroStruct(l);
 }
 
@@ -72,7 +73,11 @@ ABINLINE int locinfo_read_eachfield(File *fp, LocInfo *l)
     if(n)
     {
         l->child  = calloc(sizeof(*l->child),1);        
-        l->child->locs   = calloc(sizeof(*l->child->locs),n);
+        if(!l->child) 
+            return -1;
+		LocInfo_setsize(&l->child->locs,n);
+        if(!l->child->locs)
+            return -2;
         l->child->n_locs = n;
         for(i = 0; i < n; ++i)
             locinfo_read_eachfield(fp,l->child->locs + i);
@@ -224,7 +229,7 @@ int absfile_read_parse(char *fn, Parse *p)
         
     }
 
-
+	abfclose(fp);
     TIMER_END(locinfo_timer);
     return 0;
 }
@@ -279,7 +284,7 @@ static char* parse_find_add_str(Parse *p, char *s)
     if(s)
     {
         // dup strings is okay, get more speed this way
-        r = _strdup(s); // strpool_find_add_str(&p->strs,s);
+        r = strdup(s); // strpool_find_add_str(&p->strs,s);
         p;
         str_replacechar(r,'\n',' ');
         str_replacechar(r,'\"','\'');
@@ -394,9 +399,11 @@ void locinfo_print_time()
 void parse_cleanup(Parse *p)
 {
     int i;
+	if(!p)
+		return;
     for(i = 0; i<p->n_locs; ++i)
         locinfo_cleanup(p->locs+i);
-    free(p->locs);
+	LocInfo_destroy(&p->locs, NULL);
 }
 
 

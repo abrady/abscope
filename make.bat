@@ -20,7 +20,7 @@ call "c:/Microsoft Visual Studio 8/VC/bin/vcvars32.bat"
 @REM /Og: global opt
 
 @set LIBS= kernel32.lib pcre.lib /D PCRE_STATIC
-@set INPUTS= %LIBS% abscope.c locinfo.c c_parse.c strs.c abutil.c abtree.c abhash.c abfile.c abarray.c
+@set INPUTS= %LIBS% abscope.c locinfo.c c_parse.c strs.c abutil.c abtree.c abhash.c abfile.c abarray.c memwatch.c
 @REM for real speed: /MD vs. /MT ? (single threaded vs. multi crt?)
 @IF /I "%opt%" EQU "Y" (
 set FLAGS=/O2 /Oi /Zi /MT
@@ -35,9 +35,10 @@ cl /MP /analyze:stacksize 38000 /analyze /J /W4 %FLAGS% %INPUTS% /link /ALLOWISO
 @if NOT "%ERRORLEVEL%"=="0" goto error
 
 @echo "done"
-goto end
+symstore add /r /f abscope.* /s c:\symbols /t "foo" /v "1" /c "test"
+@REM copy abscope.exe c:\home\bin
 
-symstore add /r /f *.* /s c:\symbols /t "foo" /v "1" /c "test"
+goto end
 
 :error
 @echo "something gone wrong"

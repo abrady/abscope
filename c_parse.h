@@ -84,7 +84,14 @@ typedef enum CQueryFlag
     CQueryFlag_Cryptic    = 1<<8,
 } CQueryFlag;
 
+<<<<<<< HEAD:c_parse.h
 int c_query(CParse *cp, char *tag, int query_flags, LocInfoField flds); 
+=======
+int c_findstructs(CParse *cp, char *sn);
+int c_findfuncs(CParse *cp, char *name);
+int c_query(CParse *cp, char *tag, int query_flags);
+void c_parse_cleanup(CParse *p);
+>>>>>>> 03018d8670b255c8ca80ff45f4191337e632b472:c_parse.h
 
 void c_parse_print_time();
 extern int c_debug;

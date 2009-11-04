@@ -6,6 +6,7 @@
  *
  *
  ***************************************************************************/
+#include "abutil.h"
 #include "abscope.h"
 #include "abhash.h"
 #include "abtree.h"
@@ -168,6 +169,8 @@ int main(int argc, char **argv)
     char *exclude_dirs[128] = {0};
     int n_exclude_dirs = 0;
 
+    abinit();
+
     if(argc < 2)
     {
         usage(argc,argv);
@@ -267,8 +270,9 @@ int main(int argc, char **argv)
         
         res += c_parse_files(cp,&dir_scan);
         res += c_on_processing_finished(cp);
+		CHECK();
     }
-    
+
     if(query_str)
     {
         char cmd_buf[32];
@@ -313,15 +317,14 @@ int main(int argc, char **argv)
     {
         printf("data load took %f.2\n"
                "query run took %f.2\n"
-               "allocs took %f.2 seconds\n"
                "total process time: %f.2\n"
                ,query_timer_load
                ,query_timer_query
-               ,alloc_time()
                ,timer_diffelapsed(timer_start)
             );
         locinfo_print_time();
         c_parse_print_time(cp);
     }
+	c_parse_cleanup(cp);
     return res;
 }

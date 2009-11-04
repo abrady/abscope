@@ -23,6 +23,8 @@ char *strs_add_str(char ***pstrs, int *n_strs, char *s)
 {
     int n = ++*n_strs;
     *pstrs = realloc(*pstrs,sizeof(*pstrs)*n);
+    if(!*pstrs)
+        return NULL;
     (*pstrs)[n-1] = s;
     return (*pstrs)[n-1];
 }
@@ -58,7 +60,7 @@ char *strpool_add_str(StrPool *pool, char *s_in)
     char *s = s_in;
     if(!pool || !s)
         return NULL;
-    s = _strdup(s);
+    s = strdup(s);
     strs_add_str(&pool->strs,&pool->n_strs,s);
     avltree_insert(&pool->tree,s);    
     return s;

@@ -107,7 +107,8 @@ static AbArrayHdr* S_ADECL(re_capacity)(AbArrayHdr *a, int cap)
 			ABARRAY_UNTRACK_HANDLE(a);
 			ABARRAY_TRACK_HANDLE(res);
 		}
-        res->cap = cap;
+        if(res)
+            res->cap = cap;
         return res;
     }
     return a;
