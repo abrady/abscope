@@ -69,7 +69,7 @@
   "kill abscope process in current project"
   (interactive)
   (with-current-buffer (abscope-file)
-    (kill-process abscope-proc)))
+    (kill-process abscope-process)))
 
 
 ;; (abs-print-locinfo (cdar foo) "**")

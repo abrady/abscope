@@ -72,7 +72,8 @@ static void fixup_refs(Parse *c, Parse *p)
     for(j = 0; j < p->n_locs; ++j)
     {
         LocInfo *q = p->locs + j;
-        hash_insert(&ht,q->tag,q);
+		if(q->tag && *q->tag)
+			hash_insert(&ht,q->tag,q);
     }    
 
     for(i = 0; i < c->n_locs; ++i)

@@ -101,7 +101,7 @@ HashNode *hash_findnode_prehash(HashTable *ht, char *key,U32 hash)
         ht->cmpfp = strcmp;
     if(!hash)
     {
-        fprintf(stderr,"key didn't make a hash value\n");
+//        fprintf(stderr,"key didn't make a hash value\n");
         return NULL;
     }
     

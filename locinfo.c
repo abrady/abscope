@@ -28,7 +28,12 @@ static void locinfo_cleanup(LocInfo *l)
     free(l->referrer);
     free(l->context);
     free(l->file);
-	parse_cleanup(l->child);
+    free(l->line);
+	if(l->child)
+	{
+		parse_cleanup(l->child);
+		free(l->child);
+	}
     ZeroStruct(l);
 }
 

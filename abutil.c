@@ -173,6 +173,7 @@ int errorf(int lvl, char *fmt, ...)
 void abinit(void)
 {
 //     mwInit(); 
-    mwStatistics(MW_STAT_MODULE); // MW_STAT_LINE
+//    mwStatistics(MW_STAT_MODULE); // MW_STAT_LINE
+	mwStatistics(MW_STAT_LINE);
 //    mwAutoCheck(1); // ab: if testing, enable?
 }
