@@ -164,6 +164,7 @@ int main(int argc, char **argv)
     struct CParse *cp = &g_cp;
     int process = 0;
     int c_query_flags = 0;
+	int field_flags = 0;
     char *query_str = 0;
     char *exclude_dirs[128] = {0};
     int n_exclude_dirs = 0;
@@ -276,6 +277,7 @@ int main(int argc, char **argv)
     {
         char cmd_buf[32];
         char query_buf[1024];
+        char fld_buf[32];
         char flag_buf[32];
         if(0==strcmp(query_str,"-"))
             loop_query = TRUE;
@@ -294,18 +296,19 @@ int main(int argc, char **argv)
                 if(1 != scanf_s("%s",SSTR(cmd_buf)) || 0 != strcmp("Query",cmd_buf))
                     continue;
                 // cmd args
-                if(2 != scanf_s("%s %s",SSTR(flag_buf),SSTR(query_buf)))
+                if(3 != scanf_s("%s %s %s",SSTR(flag_buf),SSTR(fld_buf),SSTR(query_buf)))
                     continue;
                 // end of command
                 if(1 == scanf_s("%s",SSTR(cmd_buf)) && 0 != strcmp(cmd_buf,"End"))
                     continue;
                 c_query_flags = c_query_flags_from_str(flag_buf);
+                field_flags = locinfo_fields_from_str(fld_buf);
                 query_str = query_buf;
             }
             
             
             query_timer = timer_get();
-            res = c_query(cp,query_str,c_query_flags);
+            res = c_query(cp,query_str,c_query_flags,field_flags);
             query_timer_query = timer_diffelapsed(query_timer);
         } while(loop_query);
     }

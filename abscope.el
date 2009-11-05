@@ -1,3 +1,19 @@
+;;; abscope.el --- functions for interacting with the abscope tags system
+;;
+;; Copyright (C) 2009
+;; Author: Aaron Brady
+;; Keywords: tags, tools
+;; Homepage: http://github.com/abrady/abscope
+;; Version: 0.0a
+;;
+;; USAGE: 
+;; - make sure the abscope binary is in the path somewhere.
+;; - abscope-query : basic query function
+;; 
+;; by default this prints to a .org file. you may want to set up the following
+;; in your .emacs file:
+;; (require 'org) 
+;; (add-to-list 'auto-mode-alist '("\\.org\\'" . org-mode))
 
 ;;
 ;; todos:
@@ -11,14 +27,26 @@
 ;; -- org-open-file
 ;; - add strings.abs : for searching all text strings
 ;; - context should grab entire line
+;; - editors/MultiEditTable.h/(209):editors/MultiEditTable.h/(14):struct METable; : misparsed?
+;; - recursive
+(require 'cl)
+
+
 (setq abscope-file "abscope-queries.org")
 (setq abscope-exe "c:/abs/abscope/abscope.exe")
 
 (defun abs-follow-link-hook ()
   "what do do after an abscope link is followed by org mode"
-  (push-mark)
+  ;;(push-mark)
   )
 
+(defun abscope-default-input ()
+  "default input for user actions, e.g. the current word"
+  (thing-at-point 'symbol))
+
+(defun abscope-switch-buffer (buffer)
+  "switch to the buffer"
+  (switch-to-buffer buffer))
 
 (add-hook 'org-follow-link-hook 'abs-follow-link-hook)
 
@@ -27,6 +55,37 @@
 (defvar abscope-tq     nil "the command-response queue for each process")
 (make-variable-buffer-local 'abscope-tq)
 (make-variable-buffer-local 'abscope-process)
+
+(defvar abscope-loc-stack '() "the process for each project")
+(make-variable-buffer-local 'abscope-loc-stack)
+
+(defun abscope-push-loc ()
+  "push the current point on the abscope list"
+  (interactive)
+  (let
+	  ((m (point-marker)))
+	(with-current-buffer (abscope-file)
+	  (setq abscope-loc-stack (cons m abscope-loc-stack ))
+	  )
+	)
+  )
+
+
+(defun abscope-pop-loc ()
+  "pop to the last pushed abscope location"
+  (interactive)
+  (let
+	  ((m))
+	(with-current-buffer (abscope-file)
+	  (setq m (pop abscope-loc-stack))
+	  )
+	(switch-to-buffer (marker-buffer m))
+	(goto-char (marker-position m))
+	)
+  )
+
+(defalias 'abp 'abscope-pop-loc)
+
 
 (defun abscope-file ()
   "get the buffer for abscope given the context"
@@ -87,6 +146,8 @@
   (setq abscope-last-output (eval (read str)))
   )
 
+;;(setq foo '(1 2 3))
+;;(pop (reverse foo))
 ;; (setq foo-str "'(
 ;; (LocInfo 
 ;;   (File . \"a b\")
@@ -131,12 +192,15 @@ Ctxt c"
           )
     ;; 
     (setq Ctxt
-          (or 
-           (string-replace-match ".*? " Ctxt "")
-           (if (> (length Ctxt) 0) Ctxt nil)
-           (file-name-nondirectory File)))
+          (if (string-match ".*? \\(.*\\)" Ctxt) ;; strip "struct " from "struct Foo"
+	      (match-string 1 Ctxt)
+	    (if (> (length Ctxt) 0) Ctxt ;; if no context, use file instead
+	      (file-name-nondirectory File)
+	      )
+	    )
+	  )
     (insert (format "%s [[file:%s::%s][%s]]" prefix File Lineno Ctxt))
-    (insert (format "\t%s\n" (stripLeadingWhitespace Line)))
+    (insert (format "\t%s\n" Line))
     )
   )
 
@@ -184,7 +248,7 @@ Ctxt c"
     )
   )
 
-(defun abs-query (type tag)
+(defun abs-query (type fields tag)
   "fundamental function for queueing a request."
   (with-current-buffer (abscope-file)
     (abscope-re-launch)
@@ -195,13 +259,13 @@ Ctxt c"
     (insert "\n\n* " tag)
     (set-marker (process-mark abscope-process) (point))
 
-    (tq-enqueue abscope-tq (concat "Query " type " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output)
+    (tq-enqueue abscope-tq (concat "Query " type " " (or fields "a") " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output)
     (abs-proc-wait-once)
     (tq-process-buffer abscope-tq)
     )
 )
 
-(defun abscope-query (type tag)
+(defun abscope-query (type tag &optional fields)
   "query a tag by type. uses pcre syntax:
 - ? : for shortest match.
    1. \\b Match a word boundary
@@ -211,51 +275,53 @@ Ctxt c"
    5. \\z Match only at end of string
    6. \\G Match only at pos() (e.g. at the end-of-match position of prior m//g)
 "
-  (interactive "s (s)truct (S)tructref (f)unc (F)uncref:
-stag:")
-  (iswitchb-visit-buffer (abscope-file))
-  (abs-query type tag)
+  (interactive (list (read-string "s (s)truct (S)tructref (f)unc (F)uncref:" "a")
+					 (read-string "stag:" (abscope-default-input))))
+  (abscope-switch-buffer (abscope-file))
+  (abs-query type fields tag)
   )
 
 
-(defun abq (tag)
-  "query for a tag from all types"
-  (interactive (list (read-string "The tag to search for:" (readWordOrRegion))))
-  (abscope-query "a" tag)
-  )
+(defalias 'abq 'abscope-query)
 
 (defun abqc (tag)
   "find a src file"
-  (interactive (list (read-string "src file to search for:" (readWordOrRegion))))
+  (interactive (list (read-string "src file to search for:" (abscope-default-input))))
   (abscope-query "c" tag)
   )
 (defun abqf (tag)
   "find a function def"
-  (interactive (list (read-string "func to search for:" (readWordOrRegion))))
+  (interactive (list (read-string "func to search for:" (abscope-default-input))))
   (abscope-query "f" tag)
   )
 
 (defun abqF (tag)
   "find a function ref"
-  (interactive (list (read-string "func to search for:" (readWordOrRegion))))
+  (interactive (list (read-string "func to search for:" (abscope-default-input))))
   (abscope-query "F" tag)
   )
 
 (defun abqs (tag)
   "find a struct def"
-  (interactive (list (read-string "struct to search for:" (readWordOrRegion))))
+  (interactive (list (read-string "struct to search for:" (abscope-default-input))))
   (abscope-query "s" tag)
   )
 
 (defun abqp (tag)
   "find a  cryptic def"
-  (interactive (list (read-string "cryptic to search for:" (readWordOrRegion))))
+  (interactive (list (read-string "cryptic to search for:" (abscope-default-input))))
   (abscope-query "p" tag)
+  )
+
+(defun abqx (tag)
+  "find everything with 'tag' in its context def"
+  (interactive (list (read-string "context to search for:" (abscope-default-input))))
+  (abscope-query "a" tag "x")
   )
 
 (defun abqd (tag)
   "find define"
-  (interactive (list (read-string "The tag to search for:" (readWordOrRegion))))
+  (interactive (list (read-string "The tag to search for:" (abscope-default-input))))
   (abscope-query "ad" tag)
   )
 
@@ -283,7 +349,7 @@ stag:")
                       (current-buffer))
           )
     (forward-line 1)
-    (iswitchb-visit-buffer buf)
+    (abscope-switch-buffer buf)
     )
 )
 
@@ -298,7 +364,7 @@ stag:")
                       (org-open-at-point)
                       (current-buffer))
           )
-    (iswitchb-visit-buffer buf)
+    (abscope-switch-buffer buf)
     )
 )
 
@@ -340,8 +406,8 @@ stag:")
     )
   )
 
-(defun abscope-jump(tag flags)
-  (interactive (list (read-string "tag:" (readWordOrRegion))
+(defun abscope-jump(tag flags &optional flds)
+  (interactive (list (read-string "tag:" (abscope-default-input))
                (read-string "flags (s)truct (f)unc:" "a" 'abscope-find-members-history)))
   (interactive)
   (let
@@ -351,9 +417,10 @@ stag:")
        (lis)
        )
     (save-window-excursion
+	  (abscope-push-loc)
       (with-current-buffer (abscope-file)
         (setq abscope-last-output nil)
-        (abs-query flags tag) ;; this logs the history as well as provides the info
+        (abs-query flags nil tag) ;; this logs the history as well as provides the info
         (abs-proc-wait-until-done)      (if (not abscope-last-output) 
                                             (error "no info for type %s" vartype))      
         (setq lis (loop for i in abscope-last-output
@@ -385,26 +452,26 @@ stag:")
 
 (defun abjs (tag)
   "jump struct"
-  (interactive (list (read-string "struct:" (readWordOrRegion))))
+  (interactive (list (read-string "struct:" (abscope-default-input))))
   (abscope-jump tag "s"))
           
 (defun abjf (tag)
-  "jump func"
-  (interactive (list (read-string "func:" (readWordOrRegion))))
-  (abscope-jump tag "f"))
+  "jump to func/define"
+  (interactive (list (read-string "func:" (abscope-default-input))))
+  (abscope-jump tag "fd"))
 
 (defun abjc (tag)
   "jump srcfile"
-  (interactive (list (read-string "srcfile:" (readWordOrRegion))))
+  (interactive (list (read-string "srcfile:" (abscope-default-input))))
   (abscope-jump tag "c"))
 
 (defun abjd (tag)
   "jump #define"
-  (interactive (list (read-string "define:" (readWordOrRegion))))
+  (interactive (list (read-string "define:" (abscope-default-input))))
   (abscope-jump tag "d"))
           
 (defun abscope-insert(tag flags)
-  (interactive (list (read-string "tag:" (readWordOrRegion))
+  (interactive (list (read-string "tag:" (abscope-default-input))
                      (read-string "flags (s)truct (f)unc:" "a" 'abscope-find-members-history)))
   (interactive)
   (let
@@ -434,6 +501,9 @@ stag:")
 (defvar abs-find-members-history)
 (defvar abs-find-members-last-type)
 
+(make-variable-buffer-local 'abs-find-members-history)
+(make-variable-buffer-local 'abs-find-members-last-type)
+
 (defun abs-nearest-tag ()
   "helper for finding a previous tag"
   (save-excursion
@@ -462,7 +532,7 @@ stag:")
       (setq abscope-last-output nil)
       (save-window-excursion
         (with-current-buffer (abscope-file)
-          (abs-query "s" vartype)
+          (abs-query "s" nil vartype)
           (abs-proc-wait-until-done)
           (if (not abscope-last-output)
               (error "no info for type %s" vartype))
@@ -516,7 +586,7 @@ stag:")
 	(if (not funcname)
 		(error "no func found"))
 	(with-current-buffer (abscope-file)	  
-	  (abs-query "fd" (format "\\b%s\\b" funcname))
+	  (abs-query "fd" nil (format "\\b%s\\b" funcname))
 	  (abs-proc-wait-until-done)
 	  (if (not abscope-last-output)
 		  (error "no info for func %s" funcname))

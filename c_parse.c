@@ -172,74 +172,73 @@ int c_load(CParse *cp)
     return res;
 }
 
-int c_findstructs(CParse *cp, char *sn)
+int c_findstructs(CParse *cp, char *sn, LocInfoField flds)
 {
-    return parse_print_search_tag(&cp->structs,sn);
+    return parse_print_search(&cp->structs,sn,flds);
 }
 
-int c_findstructrefs(CParse *cp, char *sn)
+int c_findstructrefs(CParse *cp, char *sn, LocInfoField flds)
 {
-    return parse_print_search_tag(&cp->structrefs,sn);
+    return parse_print_search(&cp->structrefs,sn,flds);
 }
 
-int c_findfuncs(CParse *cp, char *name)
+int c_findfuncs(CParse *cp, char *name, LocInfoField flds)
 {
-    return parse_print_search_tag(&cp->funcs,name);
+    return parse_print_search(&cp->funcs,name,flds);
 }
 
-int c_findfuncrefs(CParse *cp, char *sn)
+int c_findfuncrefs(CParse *cp, char *sn, LocInfoField flds)
 {
-    return parse_print_search_tag(&cp->funcrefs,sn);
+    return parse_print_search(&cp->funcrefs,sn,flds);
 }
 
-int c_finddefines(CParse *cp, char *sn)
+int c_finddefines(CParse *cp, char *sn, LocInfoField flds)
 {
-    return parse_print_search_tag(&cp->defines,sn);
+    return parse_print_search(&cp->defines,sn,flds);
 }
 
-int c_findenums(CParse *cp, char *sn)
+int c_findenums(CParse *cp, char *sn, LocInfoField flds)
 {
-    return parse_print_search_tag(&cp->enums,sn);
+    return parse_print_search(&cp->enums,sn,flds);
 }
 
-int c_findsrcfiles(CParse *cp, char *sn)
+int c_findsrcfiles(CParse *cp, char *sn, LocInfoField flds)
 {
-    return parse_print_search_tag(&cp->srcfiles,sn);
+    return parse_print_search(&cp->srcfiles,sn,flds);
 }
 
-int c_findvars(CParse *cp, char *sn)
+int c_findvars(CParse *cp, char *sn, LocInfoField flds)
 {
-    return parse_print_search_tag(&cp->vars,sn);
+    return parse_print_search(&cp->vars,sn,flds);
 }
 
-int c_findcryptic(CParse *cp, char *sn)
+int c_findcryptic(CParse *cp, char *sn, LocInfoField flds)
 {
-    return parse_print_search_tag(&cp->cryptic,sn);
+    return parse_print_search(&cp->cryptic,sn,flds);
 }
 
-
-int c_query(CParse *cp, char *tag, int query_flags)
+int c_query(CParse *cp, char *tag, int query_flags, LocInfoField flds)
 {
     int res = 0;
     printf("'(\n");
     if(query_flags & CQueryFlag_Structs)
-        res += c_findstructs(cp,tag);
+        res += c_findstructs(cp,tag,flds);
     if(query_flags & CQueryFlag_Enums)
-        res += c_findenums(cp,tag);
+        res += c_findenums(cp,tag,flds);
     if(query_flags & CQueryFlag_Funcs)
-        res += c_findfuncs(cp,tag);
+        res += c_findfuncs(cp,tag,flds);
     if(query_flags & CQueryFlag_Defines)
-        res += c_finddefines(cp,tag);
+        res += c_finddefines(cp,tag,flds);
     if(query_flags & CQueryFlag_Structrefs)
-        res += c_findstructrefs(cp,tag);
+        res += c_findstructrefs(cp,tag,flds);
     if(query_flags & CQueryFlag_Funcrefs)
-        res += c_findfuncrefs(cp,tag);
+        res += c_findfuncrefs(cp,tag,flds);
     if(query_flags & CQueryFlag_Srcfile)
-        res += c_findsrcfiles(cp,tag);
+        res += c_findsrcfiles(cp,tag,flds);
     if(query_flags & CQueryFlag_Vars)
-        res += c_findvars(cp,tag);
+        res += c_findvars(cp,tag,flds);
     if(query_flags & CQueryFlag_Cryptic)
-        res += c_findcryptic(cp,tag);
+        res += c_findcryptic(cp,tag,flds);
     printf("(QUERY_DONE))\n\n");
     fflush(stdout);
     return res;

@@ -343,7 +343,7 @@ int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *ta
 }
 
 
-int parse_print_search_tag(Parse *p,char *tag)
+int parse_print_search(Parse *p,char *tag, LocInfoField flds)
 {
     char *err_str = 0;
     int err_val = 0;
@@ -352,6 +352,9 @@ int parse_print_search_tag(Parse *p,char *tag)
     int i;
     int matches[10];
     TIMER_START();
+
+	if(!flds)
+		flds = LocInfoField_tag;
 
     re = pcre_compile(tag, PCRE_CASELESS, &err_str, &err_val, NULL);
     if(!re)
@@ -364,8 +367,15 @@ int parse_print_search_tag(Parse *p,char *tag)
     for(i = 0; i < p->n_locs; ++i)
     {
         LocInfo *li = p->locs+i; 
+		// why didn't I integrate the bitfield check into the macro? :P
 #define TAG_MATCH(T) (T && pcre_exec(re,NULL,T,strlen(T),0,0,matches,DIMOF(matches))>=0)
-        if(TAG_MATCH(li->tag))// || TAG_MATCH(li->referrer))
+        if(((flds & LocInfoField_tag) && TAG_MATCH(li->tag))
+			|| ((flds & LocInfoField_referrer) && TAG_MATCH(li->referrer))
+			|| ((flds & LocInfoField_context) && TAG_MATCH(li->context))
+			|| ((flds & LocInfoField_referrer) && TAG_MATCH(li->referrer))
+			|| ((flds & LocInfoField_file) && TAG_MATCH(li->file))
+			|| ((flds & LocInfoField_line) && TAG_MATCH(li->line))
+			)
         {
             res++;
             locinfo_print(li,NULL);
@@ -466,3 +476,38 @@ int test_locinfo(void)
     return 0;
 }
 
+
+int locinfo_fields_from_str(char *s)
+{
+    char *a = s;
+    int res = 0;
+    if(!a)
+        return 0;
+    while(*a && !isspace(*a))
+    {
+        
+        switch(*a)
+        {
+        case 't':
+            res |= LocInfoField_tag;
+            break;
+        case 'r':
+            res |= LocInfoField_referrer;
+            break;
+        case 'c':
+            res |= LocInfoField_context;
+            break;
+        case 'f':
+            res |= LocInfoField_file;
+            break;
+        case 'l':
+            res |= LocInfoField_line;
+            break;
+        default:
+            fprintf(stderr, "unknown locinfo field %c in %s\n",*a, s);
+            return 0;
+        };
+        a++;
+    }
+    return res;
+}
