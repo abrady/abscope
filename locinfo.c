@@ -17,11 +17,6 @@ static S64 locinfo_parse_find_add_str_timer = 0;
 #define LOCINFO_TIMER_START TIMER_START
 #define LOCINFO_TIMER_END() TIMER_END(locinfo_timer)
 
-#define TYPE_T LocInfo
-#include "abarrayx.h"
-#include "abarrayx.c"
-#undef TYPE_T
-
 static void locinfo_cleanup(LocInfo *l)
 {
     free(l->tag);
@@ -80,7 +75,7 @@ ABINLINE int locinfo_read_eachfield(File *fp, LocInfo *l)
         l->child  = calloc(sizeof(*l->child),1);        
         if(!l->child) 
             return -1;
-		LocInfo_setsize(&l->child->locs,n);
+		ali_setsize(&l->child->locs,n);
         if(!l->child->locs)
             return -2;
         l->child->n_locs = n;
@@ -221,7 +216,7 @@ int absfile_read_parse(char *fn, Parse *p)
 
 
     abfread(&p->n_locs,sizeof(p->n_locs),1,fp);
-    LocInfo_setsize(&p->locs,p->n_locs);
+    ali_setsize(&p->locs,p->n_locs);
     for(i = 0; i < p->n_locs; ++i)
     {
         LocInfo *l = p->locs + i;
@@ -330,7 +325,7 @@ int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *ta
     }
     
     p->n_locs++;
-    l           = LocInfo_push(&p->locs);
+    l           = ali_push(&p->locs);
     l->tag      = parse_find_add_str(p,tag);
     l->referrer = parse_find_add_str(p,referrer);
     l->context  = parse_find_add_str(p,ctxt);
@@ -408,7 +403,7 @@ void parse_cleanup(Parse *p)
 		return;
     for(i = 0; i<p->n_locs; ++i)
         locinfo_cleanup(p->locs+i);
-	LocInfo_destroy(&p->locs, NULL);
+	ali_destroy(&p->locs, NULL);
 }
 
 
@@ -511,3 +506,9 @@ int locinfo_fields_from_str(char *s)
     }
     return res;
 }
+
+#define TYPE_T LocInfo
+#define TYPE_FUNC_PREFIX ali
+#include "abarrayx.c"
+#undef TYPE_T
+#undef TYPE_FUNC_PREFIX

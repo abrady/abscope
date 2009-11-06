@@ -83,7 +83,12 @@ typedef struct Parse
     int       n_locs;
 } Parse;
 
-    
+#define TYPE_T LocInfo
+#define TYPE_FUNC_PREFIX ali
+#include "abarrayx.h"
+#undef TYPE_T
+#undef TYPE_FUNC_PREFIX
+
 
 int absfile_write_parse(char *fn, Parse *p);
 int absfile_read_parse(char *fn, Parse *p);

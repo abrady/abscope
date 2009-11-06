@@ -32,12 +32,20 @@
 (require 'cl)
 
 
-(setq abscope-file "abscope-queries.org")
-(setq abscope-exe "c:/abs/abscope/abscope.exe")
+(defvar abscope-file		"abscope-queries.org"	"the org file where the output of abscope queries will go")
+(defvar abscope-exe			"abscope.exe"			"the application that will run as a subprocess of this library")
+(defvar abscope-process		nil						"the process for each project")
+(defvar abscope-tq			nil						"the command-response queue for each process")
+(defvar abscope-loc-history nil						"the process for each project")
+(defvar abscope-tags		nil						"a list of tags exported when the abscope process starts")
+
+(make-variable-buffer-local 'abscope-tq)
+(make-variable-buffer-local 'abscope-process)
+(make-variable-buffer-local 'abscope-loc-history)
+(make-variable-buffer-local 'abscope-tags)
 
 (defun abs-follow-link-hook ()
   "what do do after an abscope link is followed by org mode"
-  ;;(push-mark)
   )
 
 (defun abscope-default-input ()
@@ -51,13 +59,6 @@
 (add-hook 'org-follow-link-hook 'abs-follow-link-hook)
 
 ;;(setq abscope-dir "c:/src")
-(defvar abscope-process nil "the process for each project")
-(defvar abscope-tq     nil "the command-response queue for each process")
-(make-variable-buffer-local 'abscope-tq)
-(make-variable-buffer-local 'abscope-process)
-
-(defvar abscope-loc-stack '() "the process for each project")
-(make-variable-buffer-local 'abscope-loc-stack)
 
 (defun abscope-push-loc ()
   "push the current point on the abscope list"
@@ -65,7 +66,7 @@
   (let
 	  ((m (point-marker)))
 	(with-current-buffer (abscope-file)
-	  (setq abscope-loc-stack (cons m abscope-loc-stack ))
+	  (setq abscope-loc-history (cons m abscope-loc-history ))
 	  )
 	)
   )
@@ -77,7 +78,7 @@
   (let
 	  ((m))
 	(with-current-buffer (abscope-file)
-	  (setq m (pop abscope-loc-stack))
+	  (setq m (pop abscope-loc-history))
 	  )
 	(switch-to-buffer (marker-buffer m))
 	(goto-char (marker-position m))
@@ -109,7 +110,7 @@
   (with-current-buffer (abscope-file)
     (if (not (and abscope-process (equal (process-status abscope-process) 'run)))
         (save-window-excursion
-          (setq abscope-process (start-process "abscope" (current-buffer) abscope-exe "-Qa" "-"))
+          (setq abscope-process (start-process "abscope" (current-buffer) abscope-exe "-t" "-Qa" "-"))
           (setq abscope-tq (tq-create abscope-process))
           )
       )
@@ -204,8 +205,32 @@ Ctxt c"
     )
   )
 
+(defun abs-reload-tags ()
+  (let
+	  ((b))
+	  (if (file-exists-p "tags.el") 
+		  (progn
+			(if (not (setq b (find-buffer-visiting "tags.el")))
+				(save-window-excursion
+				  (setq abscope-tags nil) ;; clear this for reload
+				  (find-file "tags.el")
+				  (setq b (current-buffer)))) 
+			(setq abscope-tags (if (and b (or (not abscope-tags) (not (verify-visited-file-modtime b))))
+				(with-current-buffer b
+				  (revert-buffer t t)
+				  (beginning-of-buffer)
+				  (read (current-buffer))
+				  )
+			  abscope-tags
+			  ))
+			)
+		)
+	)
+  )
+
 (defun abscope-proc-print-output (proc str) 
   (with-current-buffer (process-buffer proc)
+	(abs-reload-tags)
     (save-excursion
       (goto-char (process-mark proc)) ;; todo: proper mark saving.
       (insert ":") ;; subtle notice of when the process finishes

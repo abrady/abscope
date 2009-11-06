@@ -20,8 +20,6 @@
 
 #ifdef _DEBUG 
 #include <winbase.h>  // for IsDebuggerPresent
-//#define MEMWATCH
-#include "memwatch.h"
 #define break_if_debugging() { static int skip_this_bp = 0; ((!skip_this_bp && (IsDebuggerPresent()))?DebugBreak(),1:1); }
 #pragma warning(disable:6308) // realloc returns NULL
 #else
@@ -169,4 +167,6 @@ void abfree(void *p);
 #define INRANGE0(N,E) INRANGE(N,0,E)
 #define POW_OF_2(N) (((N) & ((N)-1)) == 0)
 ABINLINE void free_safe(void *p) { if(p) free(p);}
+char *last_error();
+
 #endif //ABUTIL_H

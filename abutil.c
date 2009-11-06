@@ -7,7 +7,6 @@
  *
  ***************************************************************************/
 #include "abutil.h"
-#include "memwatch.h"
 #include "dirent.h"
 
 int file_exists(char *fname)
@@ -172,8 +171,21 @@ int errorf(int lvl, char *fmt, ...)
 
 void abinit(void)
 {
-//     mwInit(); 
-//    mwStatistics(MW_STAT_MODULE); // MW_STAT_LINE
-	mwStatistics(MW_STAT_LINE);
-//    mwAutoCheck(1); // ab: if testing, enable?
+}
+
+char *last_error()
+{ 
+	__declspec(thread) static char *buf = NULL;
+	if(buf)
+		LocalFree(buf);
+	
+	if(!FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER
+					  | FORMAT_MESSAGE_FROM_SYSTEM,
+					  NULL, // lpSource
+                      GetLastError(),
+					  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+					  (LPTSTR)&buf,0,
+					  NULL))
+		return NULL;
+	return buf;
 }

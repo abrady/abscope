@@ -18,6 +18,7 @@
 #undef TYPE_FUNC_PREFIX
 
 
+
 // *************************************************************************
 //  test suite
 // *************************************************************************
@@ -60,7 +61,7 @@ void foo_foreach_func(Foo *a)
 #include "abarrayx.h"
 #include "abarrayx.c"
 #undef TYPE_T
-#undef TYPE_T_CODE
+#undef TYPE_FUNC_PREFIX
 
 #define TEST(COND) if(!(COND)) {printf("%s(%d):"#COND ": failed\n",__FILE__,__LINE__); break_if_debugging(); return -1;}
 

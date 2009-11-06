@@ -3,8 +3,10 @@
  *     All Rights Reserved
  *
  * Module Description:
- *
- *
+ * 
+ * Todos:
+ * - sort locinfos
+ * - fixup of refs is slowest part of load. save those
  ***************************************************************************/
 #include "abutil.h"
 #include "abscope.h"
@@ -24,6 +26,7 @@ static void usage(int argc, char**argv)
            "-p\t\t: add the passed file to those processed\n"
            "-f\t\t: process just this file and exit\n"
            "-v\t\t: verbose output\n"
+		   "-t\t\t: write list of loaded tags out\n"
            "-T\t\t: run tests\n"
            "-D[pt]\t\t: debug (p)arse, (t)iming\n"
            "-Q[sSfFdecpa]\t\t: query for (s)tructs, (S)tructrefs (f)unctions (F)uncrefs (d)efines sr(c)file (e)nums Cry(p)tic (a)ll\n"
@@ -147,9 +150,26 @@ static int c_query_flags_from_str(char *a_in)
     return c_query_flags;
 }
 
+static void write_parse_tags(FILE *fp, char *name, Parse *p)
+{
+	int i;
+	fprintf(fp,"(%s (\n",name);
+	for(i = 0; i < ali_size(&p->locs); ++i)
+	{
+		LocInfo *l = p->locs+i;
+		if(!l->tag || !*l->tag)
+			continue;
+		fprintf(fp,"\"%s\" ",l->tag);
+		if(2==i%3)
+			fprintf(fp,"\n");
+	}
+	fprintf(fp,"))");
+}
+
 
 int main(int argc, char **argv)
 {
+	int write_tags = 0;
     BOOL loop_query = 0;
     S64 query_timer;
     double query_timer_load = 0;
@@ -200,6 +220,9 @@ int main(int argc, char **argv)
                 fprintf(stderr,"done.\n");
                 break;
 #endif
+            case 't':
+				write_tags = 1;
+                break;
             case 'v':
                 g_verbose = 1;
                 break;
@@ -270,8 +293,36 @@ int main(int argc, char **argv)
         
         res += c_parse_files(cp,&dir_scan);
         res += c_on_processing_finished(cp);
-		CHECK();
     }
+
+	if(c_load(cp)<0)
+	{
+		fprintf(stderr,"failed to load tags. exiting");
+		return -1;
+	}
+
+	if(write_tags)
+	{
+		FILE *fp = fopen("tags.el","w");
+		if(!fp)
+		{
+			fprintf(stderr,"could't open tags.el for writing, err:%s\n",last_error());
+			return -1;
+		}
+		
+		fprintf(fp,"'(\n");
+		write_parse_tags(fp,"structs",&cp->structs);
+//		write_parse_tags(fp,"structrefs",&cp->structrefs);
+		write_parse_tags(fp,"funcs",&cp->funcs);
+//		write_parse_tags(fp,"funcrefs",&cp->funcrefs);
+		write_parse_tags(fp,"defines",&cp->defines);
+		write_parse_tags(fp,"enums",&cp->enums);
+//		write_parse_tags(fp,"vars",&cp->vars);
+		write_parse_tags(fp,"srcfiles",&cp->srcfiles);
+		write_parse_tags(fp,"cryptic",&cp->cryptic);
+		fprintf(fp,"\n)\n");
+		fclose(fp);
+	}
 
     if(query_str)
     {
@@ -283,8 +334,6 @@ int main(int argc, char **argv)
             loop_query = TRUE;
 
         query_timer = timer_get();
-        if(c_load(cp)<0)
-            return -1;
         query_timer_load = timer_diffelapsed(query_timer);
         
         do
