@@ -1600,27 +1600,32 @@ yylex_start:
     }
     else if(c == '"')
     {
+parse_str:
         while((c=GETC()) != EOF)
         {
             if(c == '\\') // \n, \t, \\, \<newline> etc.
             {
-                *i++ = (char)c;
                 GETC();
-                while(c != EOF && c == ' ' || c == '\t' || c == '\r' || c == '\n')
-                {
-                    if(c == '\n')
-                        p->parse_line++;
-                    GETC();
-                }
 
-                if(c == EOF)
-                    break;
-                else
-                    *i++ = (char)c;
+				// special case: \<newline> means 
+				// concat next line
+				if(c == '\r')
+					GETC();
+				if(c == '\n')
+				{
+					p->parse_line++;
+					goto parse_str;
+				}
+
+				*i++ = '\\';
+				if(c == EOF)
+					break;
+				*i++ = (char)c;
             }
             else if(c == '"')
                 break;
-            *i++ = (char)c;
+			else
+				*i++ = (char)c;
         }
         *i = 0;
         stracpy(top->l.str,tok);
