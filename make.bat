@@ -35,9 +35,11 @@ cl /MP /analyze:stacksize 38000 /analyze /J /W4 %FLAGS% %INPUTS% /link /ALLOWISO
 @if NOT "%ERRORLEVEL%"=="0" goto error
 
 @echo "done"
-symstore add /r /f abscope.* /s c:\symbols /t "foo" /v "1" /c "test"
-copy abscope.exe c:\home\bin
-copy abscope.pdb c:\home\bin
+
+IF EXIST %HOME%\bin (
+copy abscope.exe %HOME%\bin
+copy abscope.pdb %HOME%\bin
+) 
 
 goto end
 
