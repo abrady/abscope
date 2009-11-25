@@ -331,6 +331,17 @@ Ctxt c"
     )
 )
 
+(defun abs-querytype-from-char (c)
+  "get they query type from the passed character"
+  (case c
+	(?c 'srcfiles)
+	(?f 'funcs)
+	(?F 'funcs)
+	(?s 'structs)
+	(?p 'cryptic)
+	(?d 'defines)
+	))
+
 (defun abs-query-read (prompt field)
   (with-current-buffer (abscope-file)
 	(abs-reload-tags)
