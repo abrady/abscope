@@ -19,7 +19,6 @@
 ;; todos:
 ;; - local vars command => completing read
 ;; - function params
-;; - list of files in project for auto complete
 ;; - global string pool
 ;; - shrink footprint.
 ;; - push mark properly:
@@ -30,19 +29,62 @@
 ;; - editors/MultiEditTable.h/(209):editors/MultiEditTable.h/(14):struct METable; : misparsed?
 ;; - recursive
 (require 'cl)
+(require 'ido)
 
+
+;;----------------------------------------
+;; my crazy alias section. I prefer mnemonics like
+;; M-x abc to C-a C-b c commands, feel free to use or change.
+
+(if t
+	(progn
+	  
+	  (defalias 'abp 'abscope-pop-loc)
+	  (defalias 'abq 'abscope-query)
+	  (defalias 'abj 'abscope-jump
+		"alias for jump")
+	  
+	  (defun abjs (tag)
+		"jump struct"
+		(interactive (list (abs-query-read "struct:" 'structs)))
+		(abscope-jump tag "s"))
+	  
+	  (defun abjf (tag)
+		"jump to func/define"
+		(interactive (list (abs-query-read "func:" 'funcs)))
+		(abscope-jump tag "fd"))
+	  
+	  (defun abjc (tag)
+		"jump srcfile"
+		(interactive (list (abs-query-read "srcfile:" 'srcfiles)))
+		(abscope-jump tag "c"))
+	  
+	  (defun abjd (tag)
+		"jump #define"
+		(interactive (list (abs-query-read "define:" 'defines)))
+		(abscope-jump tag "d"))
+	  (defalias 'abfm 'abscope-find-members)
+	  (defalias 'fm 'abscope-find-members)
+	  (defalias 'fp 'abscope-find-params)
+	  
+	  ))
+
+;;----------------------------------------
+;; buffer local variables used
 
 (defvar abscope-file		"abscope-queries.org"	"the org file where the output of abscope queries will go")
 (defvar abscope-exe			"abscope.exe"			"the application that will run as a subprocess of this library")
 (defvar abscope-process		nil						"the process for each project")
 (defvar abscope-tq			nil						"the command-response queue for each process")
 (defvar abscope-loc-history nil						"the process for each project")
-(defvar abscope-tags		nil						"a list of tags exported when the abscope process starts")
+(defvar abscope-tags		nil						"a list of tags exported when the abscope process starts by field")
+(defvar abscope-tags-all	nil						"every tag string in a single list")
 
 (make-variable-buffer-local 'abscope-tq)
 (make-variable-buffer-local 'abscope-process)
 (make-variable-buffer-local 'abscope-loc-history)
 (make-variable-buffer-local 'abscope-tags)
+(make-variable-buffer-local 'abscope-tags-all)
 
 (defun abs-follow-link-hook ()
   "what do do after an abscope link is followed by org mode"
@@ -85,7 +127,6 @@
 	)
   )
 
-(defalias 'abp 'abscope-pop-loc)
 
 
 (defun abscope-file ()
@@ -219,10 +260,11 @@ Ctxt c"
 				(with-current-buffer b
 				  (revert-buffer t t)
 				  (beginning-of-buffer)
-				  (read (current-buffer))
+				  (eval (read (current-buffer)))
 				  )
 			  abscope-tags
 			  ))
+			(setq abscope-tags-all (loop for i in abscope-tags append (cadr i)))
 			)
 		)
 	)
@@ -290,6 +332,7 @@ Ctxt c"
     )
 )
 
+
 (defun abscope-query (type tag &optional fields)
   "query a tag by type. uses pcre syntax:
 - ? : for shortest match.
@@ -301,40 +344,43 @@ Ctxt c"
    6. \\G Match only at pos() (e.g. at the end-of-match position of prior m//g)
 "
   (interactive (list (read-string "s (s)truct (S)tructref (f)unc (F)uncref:" "a")
-					 (read-string "stag:" (abscope-default-input))))
+					 (completing-read "stag:" abscope-tags-all nil nil (abscope-default-input))))
   (abscope-switch-buffer (abscope-file))
   (abs-query type fields tag)
   )
 
 
-(defalias 'abq 'abscope-query)
+
+(defun abs-query-read (prompt field)
+  (with-current-buffer (abscope-file)
+	(completing-read prompt (cadr (assoc field abscope-tags)) nil nil (abscope-default-input))))
 
 (defun abqc (tag)
   "find a src file"
-  (interactive (list (read-string "src file to search for:" (abscope-default-input))))
+  (interactive (list (abs-query-read "src file to search for:" 'srcfiles)))
   (abscope-query "c" tag)
   )
 (defun abqf (tag)
   "find a function def"
-  (interactive (list (read-string "func to search for:" (abscope-default-input))))
+  (interactive (list (abs-query-read "func to search for:" 'funcs)))
   (abscope-query "f" tag)
   )
 
 (defun abqF (tag)
   "find a function ref"
-  (interactive (list (read-string "func to search for:" (abscope-default-input))))
+  (interactive (list (abs-query-read "func to search for:" 'funcs)))
   (abscope-query "F" tag)
   )
 
 (defun abqs (tag)
   "find a struct def"
-  (interactive (list (read-string "struct to search for:" (abscope-default-input))))
+  (interactive (list (abs-query-read "struct to search for:" 'structs)))
   (abscope-query "s" tag)
   )
 
 (defun abqp (tag)
   "find a  cryptic def"
-  (interactive (list (read-string "cryptic to search for:" (abscope-default-input))))
+  (interactive (list (abs-query-read "cryptic to search for:" 'cryptic)))
   (abscope-query "p" tag)
   )
 
@@ -346,7 +392,7 @@ Ctxt c"
 
 (defun abqd (tag)
   "find define"
-  (interactive (list (read-string "The tag to search for:" (abscope-default-input))))
+  (interactive (list (abs-query-read "The tag to search for:" 'defines)))
   (abscope-query "ad" tag)
   )
 
@@ -472,29 +518,10 @@ Ctxt c"
     )
   )
 
-(defalias 'abj 'abscope-jump
-  "alias for jump")
+;; *************************************************************************
+;; smart inserts/completes  
+;; *************************************************************************          
 
-(defun abjs (tag)
-  "jump struct"
-  (interactive (list (read-string "struct:" (abscope-default-input))))
-  (abscope-jump tag "s"))
-          
-(defun abjf (tag)
-  "jump to func/define"
-  (interactive (list (read-string "func:" (abscope-default-input))))
-  (abscope-jump tag "fd"))
-
-(defun abjc (tag)
-  "jump srcfile"
-  (interactive (list (read-string "srcfile:" (abscope-default-input))))
-  (abscope-jump tag "c"))
-
-(defun abjd (tag)
-  "jump #define"
-  (interactive (list (read-string "define:" (abscope-default-input))))
-  (abscope-jump tag "d"))
-          
 (defun abscope-insert(tag flags)
   (interactive (list (read-string "tag:" (abscope-default-input))
                      (read-string "flags (s)truct (f)unc:" "a" 'abscope-find-members-history)))
@@ -578,9 +605,6 @@ Ctxt c"
         (setq abs-find-members-last-type (match-string 1 (cdr mbr))))
     )
   )
-(defalias 'abfm 'abscope-find-members)
-(defalias 'fm 'abscope-find-members)
-(defalias 'fp 'abscope-find-params)
 (defun abs-choose-result ()
   (let
 	  (
@@ -634,7 +658,5 @@ Ctxt c"
 	) 
   )
 	  
-	  
-
 
 (provide 'abscope)
