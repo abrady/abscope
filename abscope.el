@@ -29,7 +29,6 @@
 ;; - editors/MultiEditTable.h/(209):editors/MultiEditTable.h/(14):struct METable; : misparsed?
 ;; - recursive
 (require 'cl)
-(require 'ido)
 
 
 ;;----------------------------------------
@@ -332,6 +331,10 @@ Ctxt c"
     )
 )
 
+(defun abs-query-read (prompt field)
+  (with-current-buffer (abscope-file)
+	(abs-reload-tags)
+	(completing-read prompt (if field (cadr (assoc field abscope-tags)) abscope-tags-all) nil nil (abscope-default-input))))
 
 (defun abscope-query (type tag &optional fields)
   "query a tag by type. uses pcre syntax:
@@ -344,16 +347,10 @@ Ctxt c"
    6. \\G Match only at pos() (e.g. at the end-of-match position of prior m//g)
 "
   (interactive (list (read-string "s (s)truct (S)tructref (f)unc (F)uncref:" "a")
-					 (completing-read "stag:" abscope-tags-all nil nil (abscope-default-input))))
+					 (abs-query-read "tag:" nil)))
   (abscope-switch-buffer (abscope-file))
   (abs-query type fields tag)
   )
-
-
-
-(defun abs-query-read (prompt field)
-  (with-current-buffer (abscope-file)
-	(completing-read prompt (cadr (assoc field abscope-tags)) nil nil (abscope-default-input))))
 
 (defun abqc (tag)
   "find a src file"
