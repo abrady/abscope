@@ -36,7 +36,8 @@ cl /MP /analyze:stacksize 38000 /analyze /J /W4 %FLAGS% %INPUTS% /link /ALLOWISO
 
 @echo "done"
 symstore add /r /f abscope.* /s c:\symbols /t "foo" /v "1" /c "test"
-@REM copy abscope.exe c:\home\bin
+copy abscope.exe c:\home\bin
+copy abscope.pdb c:\home\bin
 
 goto end
 
