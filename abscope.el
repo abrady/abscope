@@ -28,6 +28,7 @@
 ;; - context should grab entire line
 ;; - editors/MultiEditTable.h/(209):editors/MultiEditTable.h/(14):struct METable; : misparsed?
 ;; - recursive
+;; - faster exe load/load on start...
 (require 'cl)
 
 
@@ -138,7 +139,10 @@
 
 (defun abscope-dir ()
   (with-current-buffer (abscope-file)
-    (string-replace-match "/$" default-directory "")))
+	(if (string-match "/$" default-directory)
+		(replace-match "" nil nil default-directory)
+	  default-directory)
+	))
 
 (defun abscope-proc ()
   "get the abscope process for a given project"
