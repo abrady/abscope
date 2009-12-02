@@ -17,7 +17,7 @@
 
 ;;
 ;; todos:
-;; - local vars command => completing read
+;; - list of sources or source regexp to find directory to launch abscope in
 ;; - function params
 ;; - global string pool
 ;; - shrink footprint.
@@ -100,14 +100,47 @@
 
 (add-hook 'org-follow-link-hook 'abs-follow-link-hook)
 
-;;(setq abscope-dir "c:/src")
+(defun abscope-file ()
+  "get the buffer for abscope given the context"
+  (let
+      ((bn default-directory)
+	   (fn)
+	   (was-loaded)
+	   (b)
+	   )
+	(setq fn (if (string-match "\\(c:/src.*?\\)/" bn)
+				 (concat (match-string 1 bn) "/" abscope-file )
+			   (concat "c:/src/" abscope-file)))
+	(if (not (find-buffer-visiting fn))
+		(setq was-loaded t))
+	(setq b (find-file-noselect fn))
+;;	(if was-loaded 
+;;		(with-current-buffer b (setq buffer-read-only t)))
+	b
+	))
+
+(defmacro with-abscope-buffer (&rest body)
+  "helper to set the context for abscope execution"
+  `(with-current-buffer (abscope-file)
+	 (let
+		 (
+;;		  (was-read-only buffer-read-only)
+		  (res)) 
+;;	   (setq buffer-read-only nil)
+	   (setq res (progn ,@body))
+;;	   (if was-read-only
+;;		   (setq buffer-read-only t))
+	   res
+	   )
+	 ))
+
 
 (defun abscope-push-loc ()
   "push the current point on the abscope list"
   (interactive)
   (let
 	  ((m (point-marker)))
-	(with-current-buffer (abscope-file)
+	(with-abscope-buffer
 	  (setq abscope-loc-history (cons m abscope-loc-history ))
 	  )
 	)
@@ -119,26 +152,23 @@
   (interactive)
   (let
 	  ((m))
-	(with-current-buffer (abscope-file)
+	(with-abscope-buffer
 	  (setq m (pop abscope-loc-history))
 	  )
-	(switch-to-buffer (marker-buffer m))
-	(goto-char (marker-position m))
+	(if (not m) (message "location stack is empty")
+	  (progn
+		(switch-to-buffer (marker-buffer m))
+		(goto-char (marker-position m))
+		))
 	)
   )
 
 
 
-(defun abscope-file ()
-  "get the buffer for abscope given the context"
-  (let
-      ((bn default-directory))
-    (if (string-match "\\(c:/src.*?\\)/" bn)
-          (find-file-noselect (concat (match-string 1 bn) "/" abscope-file ))
-      (find-file-noselect (concat "c:/src/" abscope-file)))))
+
 
 (defun abscope-dir ()
-  (with-current-buffer (abscope-file)
+  (with-abscope-buffer
 	(if (string-match "/$" default-directory)
 		(replace-match "" nil nil default-directory)
 	  default-directory)
@@ -146,12 +176,12 @@
 
 (defun abscope-proc ()
   "get the abscope process for a given project"
-  (with-current-buffer (abscope-file)
+  (with-abscope-buffer
     abscope-process))
 
 (defun abscope-re-launch ()
   "launch/re-launch the exe"
-  (with-current-buffer (abscope-file)
+  (with-abscope-buffer
     (if (not (and abscope-process (equal (process-status abscope-process) 'run)))
         (save-window-excursion
           (setq abscope-process (start-process "abscope" (current-buffer) abscope-exe "-t" "-Qa" "-"))
@@ -172,8 +202,16 @@
 (defun abscope-kill ()
   "kill abscope process in current project"
   (interactive)
-  (with-current-buffer (abscope-file)
-    (kill-process abscope-process)))
+  (with-abscope-buffer
+   (if abscope-process
+	   (kill-process abscope-process)
+	 (message "no process to kill"))))
+
+(defun abscope-clear ()
+  "erase the abscope buffer"
+  (interactive)
+  (with-abscope-buffer
+    (erase-buffer)))
 
 
 ;; (abs-print-locinfo (cdar foo) "**")
@@ -306,12 +344,12 @@ Ctxt c"
 (defun abs-proc-wait-once ()
   "stall for just a short period to try to get the output
 *seems* to be more responsive if you do this"
-  (with-current-buffer (abscope-file)
+  (with-abscope-buffer
     ;; 
-    (accept-process-output abscope-process 0.1 0 1)))
+    (accept-process-output abscope-process 0 100 1)))
 
 (defun abs-proc-wait-until-done ()
-  (with-current-buffer (abscope-file)
+  (with-abscope-buffer
     (loop for i from 1 to 1000 until abscope-last-output 
           do (abs-proc-wait-once)
           )
@@ -319,8 +357,13 @@ Ctxt c"
   )
 
 (defun abs-query (type fields tag)
-  "fundamental function for queueing a request."
-  (with-current-buffer (abscope-file)
+  "fundamental function for queueing a request. fields a string with any of:
+t.ag default if fields is nil.
+r.ef : context-specific referrer to the tag e.g. int foo, ref is int. a->b ref is a.
+c.ontext: where the tag was parsed. e.g. function, struct, global
+f.ile: file where tag was parsed
+l.ine: actual text line where the tag was parsed"
+  (with-abscope-buffer
     (abscope-re-launch)
     (if (equal type "") (setq type "a"))
     (if (equal tag "") (error "invalid (empty) tag"))
@@ -329,7 +372,7 @@ Ctxt c"
     (insert "\n\n* " tag)
     (set-marker (process-mark abscope-process) (point))
 
-    (tq-enqueue abscope-tq (concat "Query " type " " (or fields "a") " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output)
+    (tq-enqueue abscope-tq (concat "Query " type " " (or fields "t") " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output) ;; search for (t)ags by default
     (abs-proc-wait-once)
     (tq-process-buffer abscope-tq)
     )
@@ -347,7 +390,7 @@ Ctxt c"
 	))
 
 (defun abs-query-read (prompt field)
-  (with-current-buffer (abscope-file)
+  (with-abscope-buffer
 	(abs-reload-tags)
 	(completing-read prompt (if field (cadr (assoc field abscope-tags)) abscope-tags-all) nil nil (abscope-default-input))))
 
@@ -501,7 +544,7 @@ Ctxt c"
        )
     (save-window-excursion
 	  (abscope-push-loc)
-      (with-current-buffer (abscope-file)
+      (with-abscope-buffer
         (setq abscope-last-output nil)
         (abs-query flags nil tag) ;; this logs the history as well as provides the info
         (abs-proc-wait-until-done)      (if (not abscope-last-output) 
@@ -545,7 +588,7 @@ Ctxt c"
        (lis)
        )
     (save-window-excursion
-      (with-current-buffer (abscope-file)
+      (with-abscope-buffer
         (setq abscope-last-output nil)
         (abscope-query flags tag) ;; this logs the history as well as provides the info
         (abs-proc-wait-until-done)
@@ -595,7 +638,7 @@ Ctxt c"
       (setq vartype (concat "\\b" vartype "\\b" ))
       (setq abscope-last-output nil)
       (save-window-excursion
-        (with-current-buffer (abscope-file)
+        (with-abscope-buffer
           (abs-query "s" nil vartype)
           (abs-proc-wait-until-done)
           (if (not abscope-last-output)
@@ -646,7 +689,7 @@ Ctxt c"
 	   )
 	(if (not funcname)
 		(error "no func found"))
-	(with-current-buffer (abscope-file)	  
+	(with-abscope-buffer	  
 	  (abs-query "fd" nil (format "\\b%s\\b" funcname))
 	  (abs-proc-wait-until-done)
 	  (if (not abscope-last-output)

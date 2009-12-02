@@ -150,7 +150,7 @@ static int c_query_flags_from_str(char *a_in)
     return c_query_flags;
 }
 
-static void write_parse_tags(FILE *fp, char *name, Parse *p)
+void write_parse_tags(FILE *fp, char *name, Parse *p)
 {
 	int i;
 	fprintf(fp,"(%s (\n",name);
@@ -163,7 +163,7 @@ static void write_parse_tags(FILE *fp, char *name, Parse *p)
 		if(2==i%3)
 			fprintf(fp,"\n");
 	}
-	fprintf(fp,"))");
+	fprintf(fp,"))\n");
 }
 
 

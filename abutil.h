@@ -18,10 +18,11 @@
 #include "assert.h"
 //#include <winsock2.h>
 
+#pragma warning(disable:6308) // realloc returns NULL
+
 #ifdef _DEBUG 
 #include <winbase.h>  // for IsDebuggerPresent
 #define break_if_debugging() { static int skip_this_bp = 0; ((!skip_this_bp && (IsDebuggerPresent()))?DebugBreak(),1:1); }
-#pragma warning(disable:6308) // realloc returns NULL
 #else
 
 #define break_if_debugging() 0

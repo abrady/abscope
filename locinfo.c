@@ -33,7 +33,7 @@ static void locinfo_cleanup(LocInfo *l)
 }
 
 
-ABINLINE int locinfo_write_eachfield(File *fp, LocInfo *l)
+int locinfo_write_eachfield(File *fp, LocInfo *l)
 {
     int i;
     int res = 0;
@@ -57,7 +57,7 @@ ABINLINE int locinfo_write_eachfield(File *fp, LocInfo *l)
     return res;
 }
 
-ABINLINE int locinfo_read_eachfield(File *fp, LocInfo *l)
+int locinfo_read_eachfield(File *fp, LocInfo *l)
 {
     int i;
     int res = 0;

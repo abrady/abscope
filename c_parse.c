@@ -110,6 +110,30 @@ static void c_do_fixups(CParse *cp)
     }
 }
 
+int c_write_tags(CParse *cp)
+{
+	FILE *fp = fopen("tags.el","w");
+	if(!fp)
+	{
+		fprintf(stderr,"could't open tags.el for writing, err:%s\n",last_error());
+		return -1;
+	}
+	
+	fprintf(fp,"'(\n");
+	write_parse_tags(fp,"structs",&cp->structs);
+//		write_parse_tags(fp,"structrefs",&cp->structrefs);
+	write_parse_tags(fp,"funcs",&cp->funcs);
+//		write_parse_tags(fp,"funcrefs",&cp->funcrefs);
+	write_parse_tags(fp,"defines",&cp->defines);
+	write_parse_tags(fp,"enums",&cp->enums);
+//		write_parse_tags(fp,"vars",&cp->vars);
+	write_parse_tags(fp,"srcfiles",&cp->srcfiles);
+	write_parse_tags(fp,"cryptic",&cp->cryptic);
+	fprintf(fp,"\n)\n");
+	fclose(fp);
+	return 0;
+}
+
 
 int c_on_processing_finished(CParse *cp)
 {   
@@ -144,6 +168,7 @@ int c_on_processing_finished(CParse *cp)
     printf("%i cryptic\n",cp->cryptic.n_locs);
     res += absfile_write_parse("c_cryptic.abs",&cp->cryptic);
 
+	c_write_tags(cp);
     return res;
 }
 
