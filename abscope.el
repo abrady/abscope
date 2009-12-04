@@ -6,29 +6,66 @@
 ;; Homepage: http://github.com/abrady/abscope
 ;; Version: 0.0a
 ;;
-;; USAGE: 
-;; - make sure the abscope binary is in the path somewhere.
-;; - abscope-query : basic query function
+;; Installation:
+;; - make sure the abscope binary is in the path somewhere, or set `abscope-exe' to its location
+;; - load the abscope library
+;; - call abscope-scan-src on the directory you'd like to scan (customize abscope-scan-args if necessary. -E dir is the most likely thing to add for excluding certain directories)
+;;
+;; Running:
+;; All tag queries are pcre regular expressions (http://www.pcre.org/), and are case insensitive.
+;;
+;; The results of tag queries are printed to a file in the project
+;; directory named the value of `abscope-file'. usually
+;; abscope-queries.org. as you run abscope-query and abscope-jump
+;; functions this file will keep a handy history of everything you've
+;; searched for so far in a format 'org-mode' can understand for
+;; navigation.
+;;
+;; Most people will use one of the query or jump helper functions:
+;; - abscope-query-function : run a query for a function and print the results in the `abscope-file' file.
+;; - abscope-jump-function  : query and jump to the matching location (best guess for ambiguous)
+;; - abscope-query-struct   : same as above, but for a struct and not a function
+;; - abscope-jump-struct    : "", jump to the best-guess location
+;; - ...
+;;
+;; General queries can be done with this function:
+;; - abscope-query : takes a tag and a string of types to match, with
+;; "a" being a special character for matching all
+;; types. e.g. (abscope-query "a" "main") will look for any tag named
+;; 'main'. you could also say (abscope-query "df" "main") to look for
+;; all defines or functions named 'main'
+;;
+;; Navigation and history:
+;; - abscope-pop-loc    : jump to the last location you used an abscope-jump function or link to get to
+;; - abscope-next-match : next match from the last query run
+;; - abscope-prev-match : prev match from the last query run
+;; - abscope-query-replace
 ;; 
-;; by default this prints to a .org file. you may want to set up the following
-;; in your .emacs file:
+;; Autocomplete (work in progress):
+;; - abscope-insert       : do a query, and then insert the results
+;; - abscope-find-members : autocomplete struct members: if you call this with point after a-> it will try to get the type for 'a' and get you the members.
+;; - abscope-find-params  : autocomplete for function params:
+;;
+;; 
+;; Finally, you may want to set up the following:
+;; in your .emacs file so the `abscope-file' buffer is in org-mode automatically:
 ;; (require 'org) 
 ;; (add-to-list 'auto-mode-alist '("\\.org\\'" . org-mode))
+;;----------------------------------------
 
-;;
+;;----------------------------------------
 ;; todos:
-;; - list of sources or source regexp to find directory to launch abscope in
 ;; - function params
 ;; - global string pool
+;;
+;; exe todos:
 ;; - shrink footprint.
-;; - push mark properly:
-;; -- org-follow-link-hook
-;; -- org-open-file
 ;; - add strings.abs : for searching all text strings
-;; - context should grab entire line
+;; - context should grab entire line.
 ;; - editors/MultiEditTable.h/(209):editors/MultiEditTable.h/(14):struct METable; : misparsed?
-;; - recursive
-;; - faster exe load/load on start...
+;; - recursive search/call graph
+;; - faster exe load/load on start
+;;----------------------------------------
 (require 'cl)
 
 
@@ -36,37 +73,43 @@
 ;; my crazy alias section. I prefer mnemonics like
 ;; M-x abc to C-a C-b c commands, feel free to use or change.
 
-(if t
+(defcustom abscope-define-aliases t
+  "variable that controls if the three and four letter aliases for the abscope set of functions are defined.")
+
+(defcustom abscope-default-project-root "c:/src"
+  "if no abscope files can be found in the current buffer's directory or any parent directories, jump to this directory to find them")
+
+(defcustom abscope-scan-args '("-R" "." "-E" "AutoGen" "-E" "3rdparty")
+  "parameters to an abscope scan, e.g. -E .svn for ignored directories ")
+
+(if abscope-define-aliases
 	(progn
 	  
 	  (defalias 'abp 'abscope-pop-loc)
+
+	  ;; primary query/jump functions
 	  (defalias 'abq 'abscope-query)
-	  (defalias 'abj 'abscope-jump
-		"alias for jump")
+	  (defalias 'abj 'abscope-jump)
 	  
-	  (defun abjs (tag)
-		"jump struct"
-		(interactive (list (abs-query-read "struct:" 'structs)))
-		(abscope-jump tag "s"))
-	  
-	  (defun abjf (tag)
-		"jump to func/define"
-		(interactive (list (abs-query-read "func:" 'funcs)))
-		(abscope-jump tag "fd"))
-	  
-	  (defun abjc (tag)
-		"jump srcfile"
-		(interactive (list (abs-query-read "srcfile:" 'srcfiles)))
-		(abscope-jump tag "c"))
-	  
-	  (defun abjd (tag)
-		"jump #define"
-		(interactive (list (abs-query-read "define:" 'defines)))
-		(abscope-jump tag "d"))
+	  ;; query helpers
+	  (defalias 'abqc 'abscope-query-srcfile)
+	  (defalias 'abqf 'abscope-query-function)
+	  (defalias 'abqF 'abscope-query-funcref)
+	  (defalias 'abqs 'abscope-query-struct)
+	  (defalias 'abqp 'abscope-query-cryptic)
+	  (defalias 'abqd 'abscope-query-define)
+	  (defalias 'abqx 'abscope-query-context)
+
+	  ;; jump helpers
+	  (defalias 'abjc 'abscope-jump-srcfile)
+	  (defalias 'abjf 'abscope-jump-function)
+	  (defalias 'abjF 'abscope-jump-funcref)
+	  (defalias 'abjs 'abscope-jump-struct)
+	  (defalias 'abjp 'abscope-jump-cryptic)
+	  (defalias 'abjd 'abscope-jump-define)
+
+	  ;; auto complete
 	  (defalias 'abfm 'abscope-find-members)
-	  (defalias 'fm 'abscope-find-members)
-	  (defalias 'fp 'abscope-find-params)
-	  
 	  ))
 
 ;;----------------------------------------
@@ -86,7 +129,16 @@
 (make-variable-buffer-local 'abscope-tags)
 (make-variable-buffer-local 'abscope-tags-all)
 
-(defun abs-follow-link-hook ()
+(defun abscope-scan-src (dir)
+  "perform a scan on the passed directory using the default options. see `abscope-scan-args'"
+  (interactive "Ddir:")
+  (save-window-excursion
+	(find-file dir)
+	(set-process-sentinel (eval `(start-process (format "abscope-scan<%s>" dir) nil ,abscope-exe ,@abscope-scan-args)) 
+						  (lambda (p e) (message (format "%s `%s'" p e)) ))))
+			   
+
+(defun abscope-follow-link-hook ()
   "what do do after an abscope link is followed by org mode"
   )
 
@@ -98,19 +150,35 @@
   "switch to the buffer"
   (switch-to-buffer buffer))
 
-(add-hook 'org-follow-link-hook 'abs-follow-link-hook)
+(add-hook 'org-follow-link-hook 'abscope-follow-link-hook)
 
-(defun abscope-file ()
+(defun abscope-buf ()
   "get the buffer for abscope given the context"
   (let
-      ((bn default-directory)
+      ((dn)
 	   (fn)
+	   (tmp)
 	   (was-loaded)
 	   (b)
 	   )
-	(setq fn (if (string-match "\\(c:/src.*?\\)/" bn)
-				 (concat (match-string 1 bn) "/" abscope-file )
-			   (concat "c:/src/" abscope-file)))
+	(setq tmp default-directory)
+	(while tmp
+	  (setq fn (concat tmp "tags.el"))
+	  (if (file-exists-p fn)
+		  (progn 
+			(setq dn tmp)
+			(setq tmp nil))
+		(if (<= (length tmp) 3) ;; on win32 c:/.. => c:/
+			(setq tmp nil)
+		  (setq tmp (file-name-as-directory (expand-file-name (concat tmp "..")))))
+		)
+	  )
+		
+	(if (not dn)
+		(setq dn abscope-default-project-root))
+	  
+	(setq fn (concat (file-name-as-directory dn) abscope-file))
+
 	(if (not (find-buffer-visiting fn))
 		(setq was-loaded t))
 	(setq b (find-file-noselect fn))
@@ -121,7 +189,7 @@
 
 (defmacro with-abscope-buffer (&rest body)
   "helper to set the context for abscope execution"
-  `(with-current-buffer (abscope-file)
+  `(with-current-buffer (abscope-buf)
 	 (let
 		 (
 ;;		  (was-read-only buffer-read-only)
@@ -163,16 +231,7 @@
 	)
   )
 
-
-
-
-
-(defun abscope-dir ()
-  (with-abscope-buffer
-	(if (string-match "/$" default-directory)
-		(replace-match "" nil nil default-directory)
-	  default-directory)
-	))
+(defun abscope-dir () (with-abscope-buffer default-directory))
 
 (defun abscope-proc ()
   "get the abscope process for a given project"
@@ -186,13 +245,15 @@
         (save-window-excursion
           (setq abscope-process (start-process "abscope" (current-buffer) abscope-exe "-t" "-Qa" "-"))
           (setq abscope-tq (tq-create abscope-process))
+		  (message "%s not running. launching..." abscope-exe)
+		  (sleep-for 0 750) ;; stall for a bit to let the message show/process launch.
           )
       )
     )
 )
 
 (defun abscope-init (project-dir)
-  "fire up abscope for a given directory"
+  "fire up abscope for a given directory. you may want to add this to your startup for commonly used large projects where abscope load time may be a problem"
   (interactive "D project dir:")
   (save-window-excursion
     (with-current-buffer (find-file-noselect project-dir)
@@ -312,6 +373,7 @@ Ctxt c"
   )
 
 (defun abscope-proc-print-output (proc str) 
+  "the abscope process filter"
   (with-current-buffer (process-buffer proc)
 	(abs-reload-tags)
     (save-excursion
@@ -391,8 +453,8 @@ l.ine: actual text line where the tag was parsed"
 
 (defun abs-query-read (prompt field)
   (with-abscope-buffer
-	(abs-reload-tags)
-	(completing-read prompt (if field (cadr (assoc field abscope-tags)) abscope-tags-all) nil nil (abscope-default-input))))
+	(abs-reload-tags))
+	(completing-read prompt (if field (cadr (assoc field abscope-tags)) abscope-tags-all) nil nil (abscope-default-input)))
 
 (defun abscope-query (type tag &optional fields)
   "query a tag by type. uses pcre syntax:
@@ -406,131 +468,55 @@ l.ine: actual text line where the tag was parsed"
 "
   (interactive (list (read-string "s (s)truct (S)tructref (f)unc (F)uncref:" "a")
 					 (abs-query-read "tag:" nil)))
-  (abscope-switch-buffer (abscope-file))
+  (abscope-switch-buffer (abscope-buf))
   (abs-query type fields tag)
   )
 
-(defun abqc (tag)
+(defun abscope-query-srcfile (tag)
   "find a src file"
   (interactive (list (abs-query-read "src file to search for:" 'srcfiles)))
   (abscope-query "c" tag)
   )
-(defun abqf (tag)
-  "find a function def"
+(defun abscope-query-function (tag)
+  "find a function"
   (interactive (list (abs-query-read "func to search for:" 'funcs)))
   (abscope-query "f" tag)
   )
 
-(defun abqF (tag)
+(defun abscope-query-funcref (tag)
   "find a function ref"
   (interactive (list (abs-query-read "func to search for:" 'funcs)))
   (abscope-query "F" tag)
   )
 
-(defun abqs (tag)
+(defun abscope-query-struct (tag)
   "find a struct def"
   (interactive (list (abs-query-read "struct to search for:" 'structs)))
   (abscope-query "s" tag)
   )
 
-(defun abqp (tag)
+(defun abscope-query-cryptic (tag)
   "find a  cryptic def"
   (interactive (list (abs-query-read "cryptic to search for:" 'cryptic)))
   (abscope-query "p" tag)
   )
 
-(defun abqx (tag)
-  "find everything with 'tag' in its context def"
-  (interactive (list (read-string "context to search for:" (abscope-default-input))))
-  (abscope-query "a" tag "x")
-  )
-
-(defun abqd (tag)
+(defun abscope-query-define (tag)
   "find define"
   (interactive (list (abs-query-read "The tag to search for:" 'defines)))
   (abscope-query "ad" tag)
   )
 
-(defun cdbabscope-testparse () 
-  (interactive)
-  (find-file "c:/abs/abscope")
-  (cdb "cdb -2 c:/abs/abscope/abscope.exe -T")
+(defun abscope-query-context (tag)
+  "find everything with 'tag' in its context def"
+  (interactive (list (read-string "context to search for:" (abscope-default-input))))
+  (abscope-query "a" tag "x")
   )
 
-(defun cdbabscope-testquery () 
-  (interactive)
-  (find-file "c:/src")
-  (cdb "cdb -2 c:/abs/abscope/abscope.exe -Qa reward.c")
-  )
+;; *************************************************************************
+;; smart jump directly to query
+;; *************************************************************************          
 
-(defun abscope-next-match ()
-  "find the next match and go to it"
-  (interactive)
-  (let
-      ((buf))
-    (find-file (buffer-file-name (abscope-file)))
-
-    (setq buf (save-window-excursion
-                      (org-open-at-point)
-                      (current-buffer))
-          )
-    (forward-line 1)
-    (abscope-switch-buffer buf)
-    )
-)
-
-(defun abscope-prev-match ()
-  "find the next match and go to it"
-  (interactive)
-  (let
-      ((buf))
-    (find-file (abscope-file))
-    (forward-line -1)
-    (setq buf (save-window-excursion
-                      (org-open-at-point)
-                      (current-buffer))
-          )
-    (abscope-switch-buffer buf)
-    )
-)
-
-(defun abscope-matches-replace ()
-  (interactive)
-  (while t 
-    (abscope-next-match)
-    (call-interactively 'query-replace-regexp)))
-
-(defun abscope-find-var-type (varname)
-  "int a; ... should return int"
-  (let
-      (
-       (pt-max (point))
-	   (s)
-       )
-    (save-excursion
-      (beginning-of-defun)
-      (re-search-forward varname pt-max)
-      (backward-sexp 2)
-      (setq s (thing-at-point 'symbol))
-	  (if (equal s "NOCONST")
-		  (progn
-			(forward-char 1)
-			(thing-at-point 'symbol))
-		s)
-      )))
-
-(defun abscope-gather-vars (start end)
-  "gather variable decls in a region"
-  (save-excursion
-    (goto-char start) 
-    (loop while (re-search-forward ".*?\\(\\b[a-z_]+\\b\\);" end t)
-          collect (cons (match-string-no-properties 1) (match-string-no-properties 0)))))
-
-(defun abscope-gather-struct-vars ()
-  (save-excursion
-    (abscope-gather-vars (point) (progn (end-of-defun) (point)))
-    )
-  )
 
 (defun abscope-jump(tag flags &optional flds)
   (interactive (list (read-string "tag:" (abscope-default-input))
@@ -572,12 +558,117 @@ l.ine: actual text line where the tag was parsed"
     (goto-line (string-to-number   (cdr (assoc 'Lineno loc))))
     )
   )
+	  
+(defun abscope-jump-srcfile (tag)
+  "jump srcfile"
+  (interactive (list (abs-query-read "srcfile:" 'srcfiles)))
+  (abscope-jump tag "c"))
+
+(defun abscope-jump-function (tag)
+  "jump to func/define"
+  (interactive (list (abs-query-read "func:" 'funcs)))
+  (abscope-jump tag "fd"))
+
+(defun abscope-jump-struct (tag)
+  "jump struct"
+  (interactive (list (abs-query-read "struct:" 'structs)))
+  (abscope-jump tag "s"))
+
+(defun abscope-jump-cryptic (tag)
+  "jump cryptic"
+  (interactive (list (abs-query-read "cryptic:" 'cryptic)))
+  (abscope-jump tag "s"))	  
+	  
+(defun abscope-jump-define (tag)
+  "jump #define"
+  (interactive (list (abs-query-read "define:" 'defines)))
+  (abscope-jump tag "d"))
+
 
 ;; *************************************************************************
-;; smart inserts/completes  
+;; navigating matches
 ;; *************************************************************************          
 
+(defun abscope-next-match ()
+  "find the next match and go to it"
+  (interactive)
+  (let
+      ((buf))
+    (find-file (buffer-file-name (abscope-buf)))
+
+    (setq buf (save-window-excursion
+                      (org-open-at-point)
+                      (current-buffer))
+          )
+    (forward-line 1)
+    (abscope-switch-buffer buf)
+    )
+)
+
+(defun abscope-prev-match ()
+  "find the next match and go to it"
+  (interactive)
+  (let
+      ((buf))
+    (find-file (abscope-buf))
+    (forward-line -1)
+    (setq buf (save-window-excursion
+                      (org-open-at-point)
+                      (current-buffer))
+          )
+    (abscope-switch-buffer buf)
+    )
+)
+
+
+;; *************************************************************************
+;; smart inserts/completes (work in progress)
+;; *************************************************************************          
+
+
+(defun abscope-query-replace ()
+  "do a query-replace on each match in the current query from the current point in the query buffer."
+  (interactive)
+  (while t 
+    (abscope-next-match)
+    (call-interactively 'query-replace-regexp)))
+
+(defun abscope-find-var-type (varname)
+  "int a; ... should return int"
+  (let
+      (
+       (pt-max (point))
+	   (s)
+       )
+    (save-excursion
+      (beginning-of-defun)
+      (re-search-forward varname pt-max)
+      (backward-sexp 2)
+      (setq s (thing-at-point 'symbol))
+	  (if (equal s "NOCONST")
+		  (progn
+			(forward-char 1)
+			(thing-at-point 'symbol))
+		s)
+      )))
+
+(defun abscope-gather-vars (start end)
+  "gather variable decls in a region"
+  (save-excursion
+    (goto-char start) 
+    (loop while (re-search-forward ".*?\\(\\b[a-z_]+\\b\\);" end t)
+          collect (cons (match-string-no-properties 1) (match-string-no-properties 0)))))
+
+(defun abscope-gather-struct-vars ()
+  (save-excursion
+    (abscope-gather-vars (point) (progn (end-of-defun) (point)))
+    )
+  )
+
+
+
 (defun abscope-insert(tag flags)
+  "do a query, and then insert the results"
   (interactive (list (read-string "tag:" (abscope-default-input))
                      (read-string "flags (s)truct (f)unc:" "a" 'abscope-find-members-history)))
   (interactive)
@@ -619,6 +710,7 @@ l.ine: actual text line where the tag was parsed"
 
 
 (defun abscope-find-members (varname)
+  "autocomplete struct members: if you call this with point after a-> it will try to get the type for 'a' and get you the members."
   (interactive (list (abs-nearest-tag)))
   (let
       (
@@ -678,6 +770,7 @@ l.ine: actual text line where the tag was parsed"
   
 
 (defun abscope-find-params (funcname)
+  "autocomplete for function params. call this with point after opening parens"
   (interactive (list (abs-nearest-tag)))
   (let
 	  (
