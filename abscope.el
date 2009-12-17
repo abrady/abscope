@@ -158,9 +158,12 @@
       ((dn)
 	   (fn)
 	   (tmp)
+	   (tmp2)
 	   (was-loaded)
 	   (b)
 	   )
+
+	;; walk up the directory tree until a project is found
 	(setq tmp default-directory)
 	(while tmp
 	  (setq fn (concat tmp "tags.el"))
@@ -168,9 +171,9 @@
 		  (progn 
 			(setq dn tmp)
 			(setq tmp nil))
-		(if (<= (length tmp) 3) ;; on win32 c:/.. => c:/
+		(if (equal tmp (setq tmp2 (file-name-as-directory (expand-file-name (concat tmp ".."))))) ;;(<= (length tmp) 3) ;; on win32 c:/.. => c:/
 			(setq tmp nil)
-		  (setq tmp (file-name-as-directory (expand-file-name (concat tmp "..")))))
+		  (setq tmp tmp2))
 		)
 	  )
 		
@@ -358,15 +361,16 @@ Ctxt c"
 				  (setq abscope-tags nil) ;; clear this for reload
 				  (find-file "tags.el")
 				  (setq b (current-buffer)))) 
-			(setq abscope-tags (if (and b (or (not abscope-tags) (not (verify-visited-file-modtime b))))
-				(with-current-buffer b
-				  (revert-buffer t t)
-				  (beginning-of-buffer)
-				  (eval (read (current-buffer)))
+			(if (and b (or (not abscope-tags) (not (verify-visited-file-modtime b)))) 
+				(progn 
+				  (setq abscope-tags (with-current-buffer b
+									   (revert-buffer t t)
+									   (beginning-of-buffer)
+									   (eval (read (current-buffer)))
+									   )) 
+				  (setq abscope-tags-all (loop for i in abscope-tags append (cadr i)))
 				  )
-			  abscope-tags
-			  ))
-			(setq abscope-tags-all (loop for i in abscope-tags append (cadr i)))
+			  )
 			)
 		)
 	)
@@ -452,9 +456,14 @@ l.ine: actual text line where the tag was parsed"
 	))
 
 (defun abs-query-read (prompt field)
-  (with-abscope-buffer
-	(abs-reload-tags))
-	(completing-read prompt (if field (cadr (assoc field abscope-tags)) abscope-tags-all) nil nil (abscope-default-input)))
+  (completing-read prompt 
+				   ;; jump to abscope buf to get list of tags
+				   (with-abscope-buffer
+					(abs-reload-tags)
+					(if field (cadr (assoc field abscope-tags)) abscope-tags-all))
+				   nil nil 
+				   ;; get symbol at point
+				   (abscope-default-input)))
 
 (defun abscope-query (type tag &optional fields)
   "query a tag by type. uses pcre syntax:
@@ -805,6 +814,25 @@ l.ine: actual text line where the tag was parsed"
 		  (insert p))
 	) 
   )
-	  
+
+;; *************************************************************************
+;; autocomplete intergration. very handy
+;; *************************************************************************
+
+(defun abscope-autocomplete-candidate-words ()
+  "helper for auto-completing a word"
+  (with-abscope-buffer
+   (all-completions ac-prefix abscope-tags-all))
+  )
+
+(defvar abscope-autocomplete-sources '((candidates . abscope-autocomplete-candidate-words)))
+
+(defun abscope-autocomplete-init ()
+  (interactive)
+  "set up the auto complete variables"
+  (setq ac-sources '(
+					 abscope-autocomplete-sources
+					 ac-source-words-in-buffer
+					 )))
 
 (provide 'abscope)
