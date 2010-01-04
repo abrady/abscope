@@ -108,9 +108,10 @@ opendir(
     const char *dirname)
 {
   DIR *dirp;
-  assert (dirname != NULL);
-  assert (strlen (dirname) < MAX_PATH);
-
+  assert (dirname != NULL && strlen (dirname) < MAX_PATH);
+  if(!dirname)
+	  return NULL;
+  
   /* construct new DIR structure */
   dirp = (DIR*) malloc (sizeof (struct DIR));
   if (dirp != NULL) {
