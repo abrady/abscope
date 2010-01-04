@@ -1,0 +1,10 @@
+*.abs
+abscope-queries.org
+*.obj
+*.ilk
+*.pdb
+*.exe
+*.exe.bak
+*~
+tags.el
+*.idb
