@@ -144,7 +144,10 @@
 
 (defun abscope-default-input ()
   "default input for user actions, e.g. the current word"
-  (thing-at-point 'symbol))
+  (if mark-active
+	  (buffer-substring
+	   (region-beginning) (region-end))
+	(thing-at-point 'symbol)))
 
 (defun abscope-switch-buffer (buffer)
   "switch to the buffer"
@@ -821,9 +824,14 @@ l.ine: actual text line where the tag was parsed"
 
 (defun abscope-autocomplete-candidate-words ()
   "helper for auto-completing a word"
-  (with-abscope-buffer
-   (all-completions ac-prefix abscope-tags-all))
-  )
+  (cond 
+   ((re-search-backward "//" (line-beginning-position) t) nil)
+   ((string-match "($" ac-prefix) (abscope-autocomplete-candidate-functions))
+   (t
+	(with-abscope-buffer
+	 (all-completions ac-prefix abscope-tags-all))
+	)))
+   
 
 (defvar abscope-autocomplete-sources '((candidates . abscope-autocomplete-candidate-words)))
 
@@ -834,5 +842,4 @@ l.ine: actual text line where the tag was parsed"
 					 abscope-autocomplete-sources
 					 ac-source-words-in-buffer
 					 )))
-
 (provide 'abscope)
