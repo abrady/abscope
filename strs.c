@@ -159,6 +159,8 @@ int str_vsprintf(char **dst,char *fmt,va_list args)
 {
     int c = _vscprintf(fmt,args) + 1;
     *dst = realloc(*dst,c);
+	if(!*dst)
+		return 0;
     return vsprintf(*dst,fmt,args);
 }
 
@@ -210,6 +212,8 @@ char *str_vcatf(char **dst,char *fmt,va_list args)
         n = strlen(*dst);
     
     *dst = realloc(*dst,n+c);
+	if(!*dst)
+		return NULL;
     vsprintf(*dst+n,fmt,args);
     return *dst;
 }

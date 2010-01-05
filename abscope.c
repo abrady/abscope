@@ -197,6 +197,24 @@ int main(int argc, char **argv)
         return -1;
     }
 
+#ifdef _DEBUG
+	for(i = 0; i<argc; ++i)
+	{
+		if(0==strcmp(argv[i],"-Z"))
+		{
+			fprintf(stderr,"waiting for debugger...");
+			while(!IsDebuggerPresent())
+				Sleep(1);
+			break_if_debugging();
+			fprintf(stderr,"done.\n");
+		}
+		else if(0==strcmp(argv[i],"-v"))
+		{
+			g_verbose = 1;
+		}
+	}
+#endif		
+
     timer_start = timer_get();
 
     for(i = 1; i < argc; ++i)
@@ -212,19 +230,8 @@ int main(int argc, char **argv)
                 usage(argc,argv);
                 return 0;
                 break;
-#ifdef _DEBUG
-            case 'Z':
-                fprintf(stderr,"waiting for debugger...");
-                while(!IsDebuggerPresent())
-                    Sleep(1);
-                fprintf(stderr,"done.\n");
-                break;
-#endif
             case 't':
 				write_tags = 1;
-                break;
-            case 'v':
-                g_verbose = 1;
                 break;
             case 'D':
                 while(*a && !isspace(*a))

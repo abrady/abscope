@@ -134,8 +134,13 @@
   (interactive "Ddir:")
   (save-window-excursion
 	(find-file dir)
-	(set-process-sentinel (eval `(start-process (format "abscope-scan<%s>" dir) nil ,abscope-exe ,@abscope-scan-args)) 
-						  (lambda (p e) (message (format "%s `%s'" p e)) ))))
+	(with-abscope-buffer
+	 (let (addl-args)
+	   (beginning-of-buffer)
+	   (if (re-search-forward "#SCAN-OPTS: \\(.*\\)" nil t)
+		   (setq addl-args (split-string-and-unquote (match-string-no-properties 1))))
+	   (set-process-sentinel (eval `(start-process (format "abscope-scan<%s>" dir) nil ,abscope-exe ,@abscope-scan-args ,@addl-args)) (lambda (p e) (message (format "%s `%s'" p e)) ))
+	))))
 			   
 
 (defun abscope-follow-link-hook ()
@@ -291,6 +296,11 @@
 (make-variable-buffer-local 'abscope-last-output)
 (make-variable-buffer-local 'abscope-last-output-str)
 
+(defun abs-tag-from-locinfo (li)
+  "helper to get the tag field from a locinfo"
+  (and (eq (car li) 'LocInfo))
+	   (assoc 'Tag (cdr li)))
+
 (defun abs-proc-eval-output (proc str)
   "helper for reading and evaluating any exprs in the output"
   (setq abscope-last-output (eval (read str)))
@@ -380,7 +390,7 @@ Ctxt c"
   )
 
 (defun abscope-proc-print-output (proc str) 
-  "the abscope process filter"
+  "abscope process filter: prints output to the abscope buffer"
   (with-current-buffer (process-buffer proc)
 	(abs-reload-tags)
     (save-excursion
@@ -410,6 +420,14 @@ Ctxt c"
     )
   )
 
+(defun abscope-proc-eval (proc str) 
+  "abscope process filter: just evals the output"
+  (with-current-buffer (process-buffer proc)
+	(abs-reload-tags)
+	(setq abscope-last-output-str str)
+	(abs-proc-eval-output proc str)
+	))
+
 (defun abs-proc-wait-once ()
   "stall for just a short period to try to get the output
 *seems* to be more responsive if you do this"
@@ -433,19 +451,44 @@ c.ontext: where the tag was parsed. e.g. function, struct, global
 f.ile: file where tag was parsed
 l.ine: actual text line where the tag was parsed"
   (with-abscope-buffer
-    (abscope-re-launch)
-    (if (equal type "") (setq type "a"))
-    (if (equal tag "") (error "invalid (empty) tag"))
+	 (abscope-re-launch)
 
-    (end-of-buffer)
-    (insert "\n\n* " tag)
-    (set-marker (process-mark abscope-process) (point))
+	 (if (equal type "") (setq type "a"))
+	 (if (equal tag "") (error "invalid (empty) tag"))	 
+	 
+	 (tq-enqueue abscope-tq (concat "Query " type " " (or fields "t") " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-eval-output) ;; search for (t)ags by default
+	 (abs-proc-wait-until-done)
+	 abscope-last-output
+   )
+  )
 
-    (tq-enqueue abscope-tq (concat "Query " type " " (or fields "t") " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output) ;; search for (t)ags by default
-    (abs-proc-wait-once)
-    (tq-process-buffer abscope-tq)
-    )
-)
+(defun abs-query-print (type fields tag)
+  "fundamental function for queueing a request. fields a string with any of:
+t.ag default if fields is nil.
+r.ef : context-specific referrer to the tag e.g. int foo, ref is int. a->b ref is a.
+c.ontext: where the tag was parsed. e.g. function, struct, global
+f.ile: file where tag was parsed
+l.ine: actual text line where the tag was parsed"
+  (with-abscope-buffer
+	 (abscope-re-launch)
+
+	 (if (equal type "") (setq type "a"))
+	 (if (equal tag "") (error "invalid (empty) tag"))
+	 
+	 (end-of-buffer)
+	 (setq pt-start (point))
+	 (insert "\n\n* " tag)
+	 (set-marker (process-mark abscope-process) (point))
+	 
+	 (tq-enqueue abscope-tq (concat "Query " type " " (or fields "t") " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output) ;; search for (t)ags by default
+	 (abs-proc-wait-once)
+	 (tq-process-buffer abscope-tq)
+	 (if block
+		 (progn 
+		   (abs-proc-wait-until-done)
+		   abscope-last-output))
+   )
+  )
 
 (defun abs-querytype-from-char (c)
   "get they query type from the passed character"
@@ -481,7 +524,7 @@ l.ine: actual text line where the tag was parsed"
   (interactive (list (read-string "s (s)truct (S)tructref (f)unc (F)uncref:" "a")
 					 (abs-query-read "tag:" nil)))
   (abscope-switch-buffer (abscope-buf))
-  (abs-query type fields tag)
+  (abs-query-print type fields tag)
   )
 
 (defun abscope-query-srcfile (tag)
@@ -525,6 +568,7 @@ l.ine: actual text line where the tag was parsed"
   (abscope-query "a" tag "x")
   )
 
+
 ;; *************************************************************************
 ;; smart jump directly to query
 ;; *************************************************************************          
@@ -544,7 +588,7 @@ l.ine: actual text line where the tag was parsed"
 	  (abscope-push-loc)
       (with-abscope-buffer
         (setq abscope-last-output nil)
-        (abs-query flags nil tag) ;; this logs the history as well as provides the info
+        (abs-query-print flags nil tag) ;; this logs the history as well as provides the info
         (abs-proc-wait-until-done)      (if (not abscope-last-output) 
                                             (error "no info for type %s" vartype))      
         (setq lis (loop for i in abscope-last-output
@@ -743,7 +787,7 @@ l.ine: actual text line where the tag was parsed"
       (setq abscope-last-output nil)
       (save-window-excursion
         (with-abscope-buffer
-          (abs-query "s" nil vartype)
+          (abs-query-print "s" nil vartype)
           (abs-proc-wait-until-done)
           (if (not abscope-last-output)
               (error "no info for type %s" vartype))
@@ -795,7 +839,7 @@ l.ine: actual text line where the tag was parsed"
 	(if (not funcname)
 		(error "no func found"))
 	(with-abscope-buffer	  
-	  (abs-query "fd" nil (format "\\b%s\\b" funcname))
+	  (abs-query-print "fd" nil (format "\\b%s\\b" funcname))
 	  (abs-proc-wait-until-done)
 	  (if (not abscope-last-output)
 		  (error "no info for func %s" funcname))
