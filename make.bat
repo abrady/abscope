@@ -1,8 +1,19 @@
-REM @for %%a in (cl.exe) do @if EXIST %%~$PATH:a set vcvars_found=Y
-REM if "%vcvars_found%"=="Y" goto after_vcvars
-call "c:\Program Files\Microsoft Visual Studio 8\VC\bin\vcvars32.bat"
-call "c:\Program Files (x86)\Microsoft Visual Studio 8\VC\bin\vcvars32.bat"
-call "c:/Microsoft Visual Studio 8/VC/bin/vcvars32.bat"
+@REM ====================
+@REM find compiler
+@REM ====================
+
+@REM using vcvars32.bat instead of cl.exe because SN Systems uses a cl.exe for an exe name as well for VS-PS3 
+@set vcvars_found=N
+@for %%a in (vcvars32.bat) do @if EXIST %%~$PATH:a set vcvars_found=Y
+@if "%vcvars_found%"=="Y" goto after_vcvars
+@for %%a in ("c:\Program Files\Microsoft Visual Studio 8\VC\bin\vcvars32.bat" 
+	 "c:\Program Files\Microsoft Visual Studio 8\VC\bin\vcvars32.bat" 
+	 "c:\Program Files (x86)\Microsoft Visual Studio 8\VC\bin\vcvars32.bat") do @(
+	@if EXIST %%a (
+	   @call %%a
+	   @goto after_vcvars
+	)
+)
 
 :after_vcvars
 
