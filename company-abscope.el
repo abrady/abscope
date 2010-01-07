@@ -52,14 +52,16 @@
 e.g.
 - foo->|    : query for the members of the struct of type foo
 - foo(a,b,| : query for the arglist of the function foo "
-  (let (lis li)
-	(setq lis (abs-query nil "fd" (format "\\b%s" prefix)))
-	(loop for i in lis
-		  if (setq li (abs-tag-from-locinfo i))
-		  collect (cdr li)
-		  )
+  (if (abs-running-p)
+	  (let (lis li)
+		(setq lis (abs-query nil "fd" (format "\\b%s" prefix)))
+		(loop for i in lis
+			  if (setq li (abs-tag-from-locinfo i))
+			  collect (cdr li)
+			  )
+		)
 	)
-  )
+)
 
 ;; (defun company-abscope-completions-raw (prefix)
 ;;   (let (candidates)

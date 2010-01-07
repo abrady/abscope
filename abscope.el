@@ -249,10 +249,14 @@
   (with-abscope-buffer
     abscope-process))
 
+(defun abs-running-p ()
+  (with-abscope-buffer
+   (and abscope-process (equal (process-status abscope-process) 'run))))
+
 (defun abscope-re-launch ()
   "launch/re-launch the exe"
   (with-abscope-buffer
-    (if (not (and abscope-process (equal (process-status abscope-process) 'run)))
+    (if (not (abs-running-p))
         (save-window-excursion
           (setq abscope-process (start-process "abscope" (current-buffer) abscope-exe "-t" "-Qa" "-"))
           (setq abscope-tq (tq-create abscope-process))
@@ -483,10 +487,6 @@ l.ine: actual text line where the tag was parsed"
 	 (tq-enqueue abscope-tq (concat "Query " type " " (or fields "t") " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output) ;; search for (t)ags by default
 	 (abs-proc-wait-once)
 	 (tq-process-buffer abscope-tq)
-	 (if block
-		 (progn 
-		   (abs-proc-wait-until-done)
-		   abscope-last-output))
    )
   )
 
