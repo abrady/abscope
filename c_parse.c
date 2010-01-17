@@ -17,6 +17,8 @@
  * - RtlEnterCriticalSection/RtlLeaveCriticalSection ~30%
  ***************************************************************************/
 #include "c_parse.h"
+#include "errno.h"
+#include "direct.h"
 #include "abhash.h"
 #include "abscope.h"
 #include "locinfo.h"
@@ -141,32 +143,39 @@ int c_on_processing_finished(CParse *cp)
 
     c_do_fixups(cp);
 
+	res = _mkdir(".abs");
+	if(res && errno != EEXIST)
+	{
+		fprintf(stderr,"couldn't make .abs dir\n");
+		return res;
+	} 
+
     printf("%i structs\n",cp->structs.n_locs);
-    res += absfile_write_parse("c_structs.abs",&cp->structs);
+    res += absfile_write_parse(".abs/c_structs.abs",&cp->structs);
 
     printf("%i structrefs\n",cp->structrefs.n_locs);
-    res += absfile_write_parse("c_structrefs.abs",&cp->structrefs);
+    res += absfile_write_parse(".abs/c_structrefs.abs",&cp->structrefs);
 
     printf("%i funcs\n",cp->funcs.n_locs);
-    res += absfile_write_parse("c_funcs.abs",&cp->funcs);
+    res += absfile_write_parse(".abs/c_funcs.abs",&cp->funcs);
 
     printf("%i funcrefs\n",cp->funcrefs.n_locs);
-    res += absfile_write_parse("c_funcrefs.abs",&cp->funcrefs);
+    res += absfile_write_parse(".abs/c_funcrefs.abs",&cp->funcrefs);
 
     printf("%i defines\n",cp->defines.n_locs);
-    res += absfile_write_parse("c_defines.abs",&cp->defines);
+    res += absfile_write_parse(".abs/c_defines.abs",&cp->defines);
 
     printf("%i enums\n",cp->enums.n_locs);
-    res += absfile_write_parse("c_enums.abs",&cp->enums);
+    res += absfile_write_parse(".abs/c_enums.abs",&cp->enums);
 
     printf("%i vars\n",cp->vars.n_locs);
-    res += absfile_write_parse("c_vars.abs",&cp->vars);
+    res += absfile_write_parse(".abs/c_vars.abs",&cp->vars);
 
     printf("%i srcfiles\n",cp->srcfiles.n_locs);
-    res += absfile_write_parse("c_srcfiles.abs",&cp->srcfiles);
+    res += absfile_write_parse(".abs/c_srcfiles.abs",&cp->srcfiles);
 
     printf("%i cryptic\n",cp->cryptic.n_locs);
-    res += absfile_write_parse("c_cryptic.abs",&cp->cryptic);
+    res += absfile_write_parse(".abs/c_cryptic.abs",&cp->cryptic);
 
 	c_write_tags(cp);
     return res;
@@ -175,24 +184,24 @@ int c_on_processing_finished(CParse *cp)
 int c_load(CParse *cp)
 {
     int res = 0;
-    if(file_exists("c_structs.abs"))
-        res += absfile_read_parse("c_structs.abs",&cp->structs);
-    if(file_exists("c_funcs.abs"))
-        res += absfile_read_parse("c_funcs.abs",&cp->funcs);
-    if(file_exists("c_funcrefs.abs"))
-        res += absfile_read_parse("c_funcrefs.abs",&cp->funcrefs);
-    if(file_exists("c_structrefs.abs"))
-        res += absfile_read_parse("c_structrefs.abs",&cp->structrefs);
-    if(file_exists("c_defines.abs"))
-        res += absfile_read_parse("c_defines.abs",&cp->defines);
-    if(file_exists("c_enums.abs"))
-        res += absfile_read_parse("c_enums.abs",&cp->enums);
-    if(file_exists("c_vars.abs"))
-        res += absfile_read_parse("c_vars.abs",&cp->vars);
-    if(file_exists("c_srcfiles.abs"))
-        res += absfile_read_parse("c_srcfiles.abs",&cp->srcfiles);
-    if(file_exists("c_cryptic.abs"))
-        res += absfile_read_parse("c_cryptic.abs",&cp->cryptic);
+    if(file_exists(".abs/c_structs.abs"))
+        res += absfile_read_parse(".abs/c_structs.abs",&cp->structs);
+    if(file_exists(".abs/c_funcs.abs"))
+        res += absfile_read_parse(".abs/c_funcs.abs",&cp->funcs);
+    if(file_exists(".abs/c_funcrefs.abs"))
+        res += absfile_read_parse(".abs/c_funcrefs.abs",&cp->funcrefs);
+    if(file_exists(".abs/c_structrefs.abs"))
+        res += absfile_read_parse(".abs/c_structrefs.abs",&cp->structrefs);
+    if(file_exists(".abs/c_defines.abs"))
+        res += absfile_read_parse(".abs/c_defines.abs",&cp->defines);
+    if(file_exists(".abs/c_enums.abs"))
+        res += absfile_read_parse(".abs/c_enums.abs",&cp->enums);
+    if(file_exists(".abs/c_vars.abs"))
+        res += absfile_read_parse(".abs/c_vars.abs",&cp->vars);
+    if(file_exists(".abs/c_srcfiles.abs"))
+        res += absfile_read_parse(".abs/c_srcfiles.abs",&cp->srcfiles);
+    if(file_exists(".abs/c_cryptic.abs"))
+        res += absfile_read_parse(".abs/c_cryptic.abs",&cp->cryptic);
     c_do_fixups(cp);
     return res;
 }
