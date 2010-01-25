@@ -189,3 +189,11 @@ char *last_error()
 		return NULL;
 	return buf;
 }
+
+void dirscan_cleanup(DirScan *ds)
+{
+	if(!DEREF(ds,files))
+		return;
+	free(ds->files);
+	ZeroStruct(ds);
+}

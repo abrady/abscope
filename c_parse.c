@@ -11,28 +11,47 @@
  * performance: 
  * - writing out file top offender
  * -- fwrite_nolock 18%
- * -- absfile_write_parse 17%
+ * -- parse_write 17%
  * -- fwrite 12%
  * - memcpy 7%
  * - RtlEnterCriticalSection/RtlLeaveCriticalSection ~30%
  ***************************************************************************/
 #include "c_parse.h"
+#include "abserialize.h"
 #include "errno.h"
 #include "direct.h"
 #include "abhash.h"
 #include "abscope.h"
 #include "locinfo.h"
+#include "abarray.h"
+#include "abfile.h"
 
 int c_parse(CParse *ctxt);
 extern int g_verbose;
 
-int c_parse_files(CParse *cp, DirScan *scan)
+void c_parse_init(CParse *cp)
+{
+	int i;
+	if(!cp)
+		return;
+	
+	cp->pool =  STRUCT_ALLOC(*cp->pool);
+	for(i = 0; i < DIMOF(cp->parses); ++i)
+		cp->parses[i].pool = cp->pool;
+}
+
+
+int c_parse_files(CParse *cp, char **files, int n_files)
 {
     int i;
     int res = 0;
-    for(i = 0; i < scan->n_files; ++i)
+
+	if(!DEREF(cp,pool))
+		c_parse_init(cp);
+
+    for(i = 0; i < n_files; ++i)
     {
-        char *fn = scan->files[i];
+        char *fn = files[i];
         if(g_verbose)
             printf("%s\n",fn);
         
@@ -44,10 +63,15 @@ int c_parse_files(CParse *cp, DirScan *scan)
 
 int c_parse_file(CParse *cp, char *fn)
 {
+	LocInfo *file = NULL;
     int parse_res = 0;
+
+	if(!DEREF(cp,pool))
+		c_parse_init(cp);
+
     cp->parse_file = fn;
     cp->parse_line = 1;
-    cp->fp = abfopen(cp->parse_file,File_R);
+    cp->fp = abfopen(cp->parse_file,File_R,0);
     
     if(!cp->fp)
     {
@@ -58,11 +82,65 @@ int c_parse_file(CParse *cp, char *fn)
     {
         printf("failed to parse file %s, error(%i):%s\n",cp->parse_file,parse_res,cp->parse_error);
     }
-    parse_add_locinfof(&cp->srcfiles,fn,1,fn,fname_nodir(fn),fn,"file %s",fn);
+    file = parse_add_locinfof(&cp->srcfiles,fn,1,fn,fname_nodir(fn),fn,"file %s",fn);
     abfclose(cp->fp);
+
+	// for parsed files, track the modified time for dynamic re-parsing
+	if(file)
+	{
+		struct stat st = {0};
+		if(0==stat(fn,&st))
+		{
+			SrcInfo *si = file->p = STRUCT_ALLOC(SrcInfo);
+			if(si)
+				si->st_mtime = st.st_mtime; // get the modified time
+		}
+	}
+
     return parse_res;
 }
 
+static void c_remove_file_from_parse(Parse *p, char *fn)
+{
+	int i;
+	int *rms = 0;
+
+	if(!p || !fn)
+		return;
+
+	for(i = 0; i < p->n_locs; ++i)
+	{
+		LocInfo *li = p->locs + i;
+		if(0 == stricmp(li->fname, fn))
+			aint_push(&rms,i);
+	}
+	
+	for(i = aint_size(&rms)-1; i >= 0; --i)
+	{
+		int i_rm = rms[i];
+		int n_rmd = aint_size(&rms) - 1 - i;
+		int n_mov = p->n_locs - i_rm - n_rmd - 1;
+		CopyStructs(p->locs+i_rm,p->locs+i_rm+1,n_mov);
+	}
+
+	aint_destroy(&rms);
+}
+
+// remove all locinfos associated with a particular file
+void c_remove_files(CParse *cp, char **fns, int n_fns)
+{
+	int i;
+	int j;
+
+	for(i = 0; i < DIMOF(cp->parses); ++i)
+	{
+		for(j = 0; j < n_fns; ++j)
+			c_remove_file_from_parse(cp->parses+i,fns[j]);
+	}
+}
+
+
+// 
 static void fixup_refs(Parse *c, Parse *p)
 {
     int i;
@@ -81,8 +159,9 @@ static void fixup_refs(Parse *c, Parse *p)
     for(i = 0; i < c->n_locs; ++i)
     {
         LocInfo *l = c->locs + i;
-        LocInfo *q;
-        q = *l->referrer ? hash_find(&ht,l->referrer) : NULL;
+        LocInfo *q = 0;
+		if(l->referrer && *l->referrer)
+			q = hash_find(&ht,l->referrer);
         if(!q)
             continue;
         l->ref = q;
@@ -92,52 +171,113 @@ static void fixup_refs(Parse *c, Parse *p)
 
 static void c_do_fixups(CParse *cp)
 {
-    int i;
-    // funcrefs  . referrer = caller
-    // structrefs. referrer = type
-    fixup_refs(&cp->funcrefs,&cp->funcs);
-    fixup_refs(&cp->structrefs,&cp->structs);
-    for(i = 0; i < cp->structs.n_locs; ++i)
-    {
-//        int j;
-        LocInfo *s = cp->structs.locs + i;
-        if(!s->child)
-            continue;
-        fixup_refs(s->child,&cp->structs);
-//         for(j = 0; j < s->child->n_locs; ++j)
-//         {
-//             LocInfo *c = s->child->locs + j;
-//             c->ref = s;
-//         }
-    }
+    fixup_refs(&cp->funcrefs,&cp->funcs);     // point all funcrefs at their funcs
+    fixup_refs(&cp->structrefs,&cp->structs); // point all the refs at their struct
+	fixup_refs(&cp->structmbrs,&cp->structs); // point all the mbrs at their struct
 }
 
-int c_write_tags(CParse *cp)
+
+
+// helper for writing out useful tags to be used in emacs
+// for auto-completing requests to abscope
+static int c_write_tags(CParse *cp)
 {
 	FILE *fp = fopen("tags.el","w");
 	if(!fp)
 	{
 		fprintf(stderr,"could't open tags.el for writing, err:%s\n",last_error());
 		return -1;
-	}
-	
+	}	
+
 	fprintf(fp,"'(\n");
 	write_parse_tags(fp,"structs",&cp->structs);
 //		write_parse_tags(fp,"structrefs",&cp->structrefs);
+	write_parse_tags(fp,"structmbrs",&cp->structmbrs);
 	write_parse_tags(fp,"funcs",&cp->funcs);
 //		write_parse_tags(fp,"funcrefs",&cp->funcrefs);
 	write_parse_tags(fp,"defines",&cp->defines);
 	write_parse_tags(fp,"enums",&cp->enums);
 //		write_parse_tags(fp,"vars",&cp->vars);
-	write_parse_tags(fp,"srcfiles",&cp->srcfiles);
 	write_parse_tags(fp,"cryptic",&cp->cryptic);
+	write_parse_tags(fp,"srcfiles",&cp->srcfiles);
+		
 	fprintf(fp,"\n)\n");
 	fclose(fp);
 	return 0;
 }
 
+#define PROJFILE_VERSION 0x20100112
+static void c_write_projfile(CParse *cp)
+{
+	FILE *fp = fopen(".abs/project.txt","wb");
+	int i;
 
-int c_on_processing_finished(CParse *cp)
+	if(!fp)
+	{
+		fprintf(stderr,"couldn't open project file for writing\n");
+		return;
+	}
+
+	fprintf(fp,"VERSION %i\n",PROJFILE_VERSION);
+
+	for(i = 0; i < cp->srcfiles.n_locs; ++i)
+	{
+		LocInfo *li = cp->srcfiles.locs + i;
+		SrcInfo *fi = li->p;
+		if(!fi)
+			continue;
+		fprintf(fp,"%s\t%i\n",li->fname,fi->st_mtime);
+	}
+	fclose(fp);	
+}
+
+static void c_load_projfile(CParse *cp)
+{
+	int ver;
+	FILE *fp = fopen(".abs/project.txt","rb");
+	char fn[1024];
+	time_t mt = 0;
+
+	if(!fp)
+	{
+		fprintf(stderr,"couldn't open project file for writing\n");
+		return;
+	}
+	
+	if(1 != fscanf(fp,"VERSION %i\n",&ver)
+	   || ver != PROJFILE_VERSION)
+	{
+		fclose(fp);
+		fprintf(stderr,"project version mismatch, %i!=%i",ver,PROJFILE_VERSION);
+		return;
+	}	
+
+	// slurp up the src names with the saved modified times
+	// so we can use it later.
+	
+	while(2==fscanf(fp,"%s\t%i\n",fn,&mt))
+	{
+		char *str;
+		SrcInfo *si = hash_find(&cp->project.srcinfo_from_str,fn);
+		if(si)
+		{
+			fprintf(stderr,"duplicate srcfile %s, skipping",fn);
+			continue;
+		}
+
+		si = STRUCT_ALLOC(*si);
+		if(!si)
+			continue;
+		
+		str = strpool_add(cp->pool,fn);
+		si->st_mtime = mt;
+		hash_insert(&cp->project.srcinfo_from_str,str,si);
+	}
+
+	fclose(fp);	
+}
+
+int c_parse_write(CParse *cp)
 {   
     int res = 0;
 
@@ -148,61 +288,92 @@ int c_on_processing_finished(CParse *cp)
 	{
 		fprintf(stderr,"couldn't make .abs dir\n");
 		return res;
-	} 
+	}
+	res = 0;
 
-    printf("%i structs\n",cp->structs.n_locs);
-    res += absfile_write_parse(".abs/c_structs.abs",&cp->structs);
+	if(0!=strpool_write(".abs/strpool.abs",cp->pool))
+	{
+		fprintf(stderr,"strs failed to write.\n");
+		return -1;
+	}
+	
+#define WRITE_PARSE(P)  \
+	{					\
+		printf("%i " #P, cp->P.n_locs);			\
+		if(0 != parse_filewrite(".abs/c_" #P ".abs",&cp-> P))	\
+		{														\
+			printf("FAILED");									\
+			res = -1;											\
+		}														\
+		printf("\n");											\
+	}
+	
+	WRITE_PARSE(structs);
+	WRITE_PARSE(structrefs);
+	WRITE_PARSE(structmbrs);
+	WRITE_PARSE(funcs);
+	WRITE_PARSE(funcrefs);
+	WRITE_PARSE(defines);
+	WRITE_PARSE(enums);
+	WRITE_PARSE(vars);
+	WRITE_PARSE(srcfiles);
+	WRITE_PARSE(cryptic);
 
-    printf("%i structrefs\n",cp->structrefs.n_locs);
-    res += absfile_write_parse(".abs/c_structrefs.abs",&cp->structrefs);
-
-    printf("%i funcs\n",cp->funcs.n_locs);
-    res += absfile_write_parse(".abs/c_funcs.abs",&cp->funcs);
-
-    printf("%i funcrefs\n",cp->funcrefs.n_locs);
-    res += absfile_write_parse(".abs/c_funcrefs.abs",&cp->funcrefs);
-
-    printf("%i defines\n",cp->defines.n_locs);
-    res += absfile_write_parse(".abs/c_defines.abs",&cp->defines);
-
-    printf("%i enums\n",cp->enums.n_locs);
-    res += absfile_write_parse(".abs/c_enums.abs",&cp->enums);
-
-    printf("%i vars\n",cp->vars.n_locs);
-    res += absfile_write_parse(".abs/c_vars.abs",&cp->vars);
-
-    printf("%i srcfiles\n",cp->srcfiles.n_locs);
-    res += absfile_write_parse(".abs/c_srcfiles.abs",&cp->srcfiles);
-
-    printf("%i cryptic\n",cp->cryptic.n_locs);
-    res += absfile_write_parse(".abs/c_cryptic.abs",&cp->cryptic);
+	printf("writing project file\n");
+	c_write_projfile(cp);
 
 	c_write_tags(cp);
     return res;
 }
 
-int c_load(CParse *cp)
+int c_parse_load(CParse *cp)
 {
+	int i;
     int res = 0;
-    if(file_exists(".abs/c_structs.abs"))
-        res += absfile_read_parse(".abs/c_structs.abs",&cp->structs);
-    if(file_exists(".abs/c_funcs.abs"))
-        res += absfile_read_parse(".abs/c_funcs.abs",&cp->funcs);
-    if(file_exists(".abs/c_funcrefs.abs"))
-        res += absfile_read_parse(".abs/c_funcrefs.abs",&cp->funcrefs);
-    if(file_exists(".abs/c_structrefs.abs"))
-        res += absfile_read_parse(".abs/c_structrefs.abs",&cp->structrefs);
-    if(file_exists(".abs/c_defines.abs"))
-        res += absfile_read_parse(".abs/c_defines.abs",&cp->defines);
-    if(file_exists(".abs/c_enums.abs"))
-        res += absfile_read_parse(".abs/c_enums.abs",&cp->enums);
-    if(file_exists(".abs/c_vars.abs"))
-        res += absfile_read_parse(".abs/c_vars.abs",&cp->vars);
-    if(file_exists(".abs/c_srcfiles.abs"))
-        res += absfile_read_parse(".abs/c_srcfiles.abs",&cp->srcfiles);
-    if(file_exists(".abs/c_cryptic.abs"))
-        res += absfile_read_parse(".abs/c_cryptic.abs",&cp->cryptic);
-    c_do_fixups(cp);
+	SerializeCtxt ctxt = {0}; 
+	StrPool *pool =  STRUCT_ALLOC(*pool);
+
+	serializectxt_init(&ctxt);
+
+	for(i = 0; i < DIMOF(cp->parses); ++i)
+		cp->parses[i].pool = pool;
+
+	// currently after loading everything else. the smart thing would be
+	// to load this first so we
+	c_load_projfile(cp);	
+
+	if(0 != strpool_read(".abs/strpool.abs",pool,&ctxt))
+		return -1;
+
+#define READ_PARSE(P)  \
+	{					\
+		printf("%i " #P, cp->P.n_locs);			\
+		if(0 != parse_fileread(".abs/c_" #P ".abs",&cp-> P, &ctxt))	\
+		{														\
+			printf("FAILED");									\
+			res = -1;											\
+		}														\
+		printf("\n");											\
+	}
+
+	READ_PARSE(structs);
+	READ_PARSE(structrefs);
+	READ_PARSE(structmbrs);
+	READ_PARSE(funcs);
+	READ_PARSE(funcrefs);
+	READ_PARSE(defines);
+	READ_PARSE(enums);
+	READ_PARSE(vars);
+	READ_PARSE(srcfiles);
+	READ_PARSE(cryptic);
+
+	for(i = 0; i < DIMOF(cp->parses); ++i)
+		res += parse_fixup(cp->parses+i,&ctxt);
+
+    c_do_fixups(cp); // intra Parse things like struct members to structs
+
+	serializectxt_cleanup(&ctxt);
+
     return res;
 }
 
@@ -214,6 +385,11 @@ int c_findstructs(CParse *cp, char *sn, LocInfoField flds)
 int c_findstructrefs(CParse *cp, char *sn, LocInfoField flds)
 {
     return parse_print_search(&cp->structrefs,sn,flds);
+}
+
+int c_findstructmbrs(CParse *cp, char *sn, LocInfoField flds)
+{
+    return parse_print_search(&cp->structmbrs,sn,flds);
 }
 
 int c_findfuncs(CParse *cp, char *name, LocInfoField flds)
@@ -265,6 +441,8 @@ int c_query(CParse *cp, char *tag, int query_flags, LocInfoField flds)
         res += c_finddefines(cp,tag,flds);
     if(query_flags & CQueryFlag_Structrefs)
         res += c_findstructrefs(cp,tag,flds);
+    if(query_flags & CQueryFlag_Structmbrs)
+        res += c_findstructmbrs(cp,tag,flds);
     if(query_flags & CQueryFlag_Funcrefs)
         res += c_findfuncrefs(cp,tag,flds);
     if(query_flags & CQueryFlag_Srcfile)
@@ -436,15 +614,12 @@ typedef struct StackElt
 
 static LocInfo* c_add_struct(CParse *p, char *struct_name, int lineno)
 {
-    int i = parse_add_locinfof(&p->structs,p->parse_file,lineno,p->line,struct_name,NULL,"struct %s", struct_name);
-    return p->structs.locs + i;
+    return parse_add_locinfof(&p->structs,p->parse_file,lineno,p->line,struct_name,NULL,"struct %s", struct_name);
 }
 
 static void c_add_structmbr(CParse *p, LocInfo *s, StackElt *mbr, StackElt *mbr_type)
 {
-    if(!s->child)
-        s->child = calloc(sizeof(Parse),1);
-    parse_add_locinfof(s->child,p->parse_file,mbr->lineno,p->line,mbr->l.str,mbr_type->l.str,"struct %s", s->tag);
+    parse_add_locinfof(&p->structmbrs,p->parse_file,mbr->lineno,p->line,mbr->l.str,mbr_type->l.str,"struct %s", s->tag);
 }
 
 
@@ -1290,6 +1465,9 @@ int c_parse(CParse *p)
     int res = 0;
     char *s;
 
+	if(!DEREF(p,pool))
+		c_parse_init(p);
+
     p->stack  = stack;
     p->m_stack = 0;
     p->n_stack = 0;
@@ -1750,7 +1928,57 @@ parse_str:
     LEX_RET(TOK);
 }
 
-#define TEST(COND) if(!(COND)) {fprintf(stderr,#COND ": failed\n"); break_if_debugging(); return -1;}
+#define TEST(COND) if(!(COND)) {fprintf(stderr,#COND ": failed line(%i)\n",__LINE__); break_if_debugging(); return -1;}
+
+int c_parse_readwrite_test()
+{
+	CParse *cp = STRUCT_ALLOC(*cp);
+	CParse *cp2 = STRUCT_ALLOC(*cp2);
+	int i;
+	
+	c_parse_init(cp);
+	TEST(0==_chdir("./test"));
+
+	for(i = 0; i < DIMOF(cp->parses); ++i)
+	{
+		char tmp[32];
+		sprintf(tmp,"%3d",i);
+		parse_add_locinfo(cp->parses+i,tmp,i,tmp,tmp,tmp,tmp);
+	}
+
+	TEST(0==c_parse_write(cp));
+	TEST(0==c_parse_load(cp2));
+
+	for(i = 0; i < DIMOF(cp->parses); ++i)
+	{
+		Parse *p,*p2;
+		char tmp[32];
+		LocInfo *l, *l2;
+		sprintf(tmp,"%3d",i);
+		p = cp->parses+i;
+		p2 = cp2->parses+i;
+		TEST(p->n_locs == p2->n_locs);
+		l = p->locs;
+		l2 = p2->locs;
+		TEST(l->tag != l2->tag && 0==strcmp(l->tag,l2->tag));
+		TEST(l->referrer != l2->referrer && 0==strcmp(l->referrer,l2->referrer));
+		TEST(l->context != l2->context && 0==strcmp(l->context,l2->context));
+		TEST(l->context != l2->context && 0==strcmp(l->context,l2->context));
+		TEST(l->fname != l2->fname && 0==strcmp(l->fname,l2->fname));
+		TEST(l->lineno == l2->lineno);
+		TEST(l->line != l2->line && 0==strcmp(l->line,l2->line));
+	}
+
+	c_parse_cleanup(cp);
+	c_parse_cleanup(cp2);
+
+	TEST(0==_chdir(".."));
+
+	free(cp);
+	free(cp2);
+	
+	return 0;
+}
 
 BOOL dirscan_accept_c_files(char *path, char **ctxt)
 {
@@ -1849,22 +2077,12 @@ int c_parse_test()
     TEST(0==strcmp(li->tag,"Foo"));
     TEST(li->referrer == NULL);
     TEST(0==strcmp(li->context,"struct Foo"));
-    TEST(0==stricmp(li->file,"test/Foo.c"));
-    TEST(li->child);
-    INIT_LI((*li->child));
-    TEST_LI("a", "int", "struct Foo");
-    TEST_LI("b", "char", "struct Foo");
-    TEST(li == li_end);
+    TEST(0==stricmp(li->fname,"test/Foo.c"));
 
     li = cp.structs.locs + 1;
     TEST(0==strcmp(li->tag,"Bar"));
-    TEST(0==stricmp(li->file,"test/Foo.c"));
+    TEST(0==stricmp(li->fname,"test/Foo.c"));
     TEST(0==strcmp(li->context,"struct Bar"));
-    TEST(li->child && li->child->n_locs == 2);
-
-    INIT_LI((*li->child));
-    TEST_LI("bar_a", "int",  "struct Bar");
-    TEST_LI("baz_b", "char", "struct Bar");
 
     li = cp.structs.locs + 2;
     TEST(0==strcmp(li->tag,"Baz"));
@@ -1873,9 +2091,12 @@ int c_parse_test()
     li++;
     TEST(0==strcmp(li->tag,"Foo2"));
     TEST(0==strcmp(li->context,"struct Foo2"));
-    TEST(li->child);
 
-    INIT_LI((*li->child));
+    INIT_LI(cp.structmbrs);
+    TEST_LI("a", "int", "struct Foo");
+    TEST_LI("b", "char", "struct Foo");
+    TEST_LI("bar_a", "int",  "struct Bar");
+    TEST_LI("baz_b", "char", "struct Bar");
     TEST_LI("hNameMsg", "Message",  "struct Foo2");
     TEST_LI("iSortID", "U32", "struct Foo2");
     TEST_LI("bSearchable", "bool", "struct Foo2");
@@ -1886,18 +2107,18 @@ int c_parse_test()
     TEST(cp.funcs.n_locs >= 3);
     li = cp.funcs.locs + 0;
     TEST(0==strcmp(li->tag,"test_func"));
-    TEST(0==stricmp(li->file,"test/Foo.c"));
+    TEST(0==stricmp(li->fname,"test/Foo.c"));
     TEST(0==strcmp(li->context,"func test_func"))
     
     li = cp.funcs.locs + 1;
     TEST(0==strcmp(li->tag,"CommonAlgoTables_Load"));
-    TEST(0==stricmp(li->file,"test/Foo.c"));
+    TEST(0==stricmp(li->fname,"test/Foo.c"));
     TEST(0==strcmp(li->context,"func CommonAlgoTables_Load"));
     
     TEST(cp.defines.n_locs == 1);
     li = cp.defines.locs + 0;
     TEST(0==strcmp(li->tag,"FOO"));
-    TEST(0==stricmp(li->file,"test/Foo.c"));
+    TEST(0==stricmp(li->fname,"test/Foo.c"));
     TEST(NULL==li->context);
     TEST(NULL==li->referrer);
     
@@ -1957,8 +2178,10 @@ int c_parse_test()
     INIT_LI(cp.srcfiles);
     TEST_LI("foo.c", "test/foo.c", "file test/foo.c");
     TEST(li == li_end);
-    
+
     // TODO: do a final lineno test
+
+	TEST(0==c_parse_readwrite_test());
 
     return 0;
 }
@@ -1967,6 +2190,7 @@ void c_parse_cleanup(CParse *p)
 {
 	parse_cleanup(&p->structs);
 	parse_cleanup(&p->structrefs);
+	parse_cleanup(&p->structmbrs);
 	parse_cleanup(&p->funcs);
 	parse_cleanup(&p->funcrefs);
 	parse_cleanup(&p->defines);
@@ -1975,3 +2199,4 @@ void c_parse_cleanup(CParse *p)
 	parse_cleanup(&p->srcfiles);
 	parse_cleanup(&p->cryptic);
 }
+

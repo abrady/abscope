@@ -9,18 +9,17 @@
 #ifndef AB_FILE_H
 #define AB_FILE_H
 
-typedef enum FileMode
+typedef enum FileType
 {
-    FileMode_None,
-    FileMode_CRT,
-    FileMode_Mem,
-} FileMode;
+    FileType_CRT,
+    FileType_Mem,
+} FileType;
 
 typedef struct MemFile
 {
     char *p;
-    S64 i;
-    S64 n;
+    size_t i;
+    size_t n;
 } MemFile;
 typedef enum FileFlags
 {
@@ -31,7 +30,8 @@ typedef enum FileFlags
 
 typedef struct File
 {
-    FileMode mode;
+	char *fn;
+    FileType type;
     union
     {
         void *crt;
@@ -40,19 +40,18 @@ typedef struct File
 } File;
 
 
-File *MemFile_load(char const *fn);
+File *memfile_load(char const *fn);
 
-File *abfopen(char const *fn,FileFlags mode);
+File *abfopen(char const *fn, FileFlags mode, FileType type);
 void abfclose(File *f);
 size_t abfread (void       *buf, size_t n1, size_t n2, File *f);
 size_t abfwrite(void const *buf, size_t n1, size_t n2, File *f);
 
 int abgetc(File *f);
 int abungetc(int c, File *f);
-S64 abfseek(File *f, S64 offset, int origin);
+size_t abfseek(File *f, size_t offset, int origin);
 
-#ifndef NO_FILE_OVERRIDES
+int abfile_test();
 
-#endif //  NO_FILE_OVERRIDES 
 
 #endif //AB_FILE_H

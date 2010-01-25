@@ -7,8 +7,11 @@
  *
  ***************************************************************************/
 #include "abscope.h"
+#include "abarray.h"
 #include "strs.h"
 #include "abserialize.h"
+
+StrPool g_strpool;
 
 char *strs_find_str(char **strs, int n_strs, char *s)
 {
@@ -37,79 +40,6 @@ char *strs_find_add_str(char ***pstrs, int *n_strs, char *s)
     return strs_add_str(pstrs,n_strs,s);
 }
 
-char *strpool_find_str(StrPool *pool, char *s)
-{
-    if(!pool)
-        return NULL;
-    return avltree_find(&pool->tree,s);
-}
-
-char *strpool_find_add_str(StrPool *pool, char *s)
-{
-    char *p;
-    if(!pool || !s)
-        return NULL;
-    p = strpool_find_str(pool,s);
-    if(p)
-        return p;
-    return strpool_add_str(pool,s);
-}
-
-char *strpool_add_str(StrPool *pool, char *s_in)
-{
-    char *s = s_in;
-    if(!pool || !s)
-        return NULL;
-    s = strdup(s);
-    strs_add_str(&pool->strs,&pool->n_strs,s);
-    avltree_insert(&pool->tree,s);    
-    return s;
-}
-
-void strpool_cleanup(StrPool *p)
-{
-    avltree_cleanup(&p->tree,0);
-    free(p->strs);
-}
-
-
-// a contiguous block of strs
-void strpool_add_strblock(StrPool *pool, char *strblock, char *end)
-{
-    char *s;
-    if(!pool || !strblock)
-        return;
-    s = strblock;
-    while(s < end)
-    {
-        int n = strlen(s) + 1;
-        if(!strpool_find_str(pool,s))
-        {
-            strs_add_str(&pool->strs,&pool->n_strs,s);
-            avltree_insert(&pool->tree,s);
-        }
-        s += n;
-    }
-}
-
-// char *strs_pack(char **strs, int n_strs, int *n_bytes_res)
-// {
-//     int strs_len;
-//     int i;
-//     char *res;
-//     char *s;
-//     strs_len = 0;
-//     for(i = 0;i < n_strs; ++i)
-//         strs_len += strlen(p->pool.strs[i]);    
-//     res = malloc(strs_len);
-//     for(i = 0;i < n_strs; ++i)
-//     {
-//         strcpy(s,strs[i]);
-//         s += strlen(strs[i])+1;
-//     }
-//     return res;
-// }
-
 void strs_cleanup(char **strs, int n_strs)
 {
     int i;
@@ -120,39 +50,159 @@ void strs_cleanup(char **strs, int n_strs)
     }
 }
 
-static int strpool_tree_traverser_cb(AvlNode *n, void *ctxt)
-{
-    File *fp = (File*)ctxt;
-    return string_binwrite(fp,n->p);
-}
+// *************************************************************************
+//  strpool
+// *************************************************************************
 
-int strpool_binwrite(FILE *fp, StrPool *pool)
+
+typedef struct StrBlock
+{
+	char *block;
+	int n;
+} StrBlock;
+
+char *strpool_find(StrPool *pool, char *s)
 {
     if(!pool)
-        return 0;
-    return avltree_traverse(&pool->tree,&strpool_tree_traverser_cb,fp);
+        return NULL;
+    return (char*)hash_find(pool->dict,s);
 }
 
-char *strblock_from_strpool(int *res_block_len, StrPool *pool)
+char *strpool_add(StrPool *pool, char *s)
 {
-    int i;
-    int n_res = 0;
-    int n;
-    char *res;
-    char *s;
-    for(i = 0; i < pool->n_strs; ++i)
-        n_res += (strlen(pool->strs[i]) + 1);
-    res = malloc(n_res);
-    s = res;
-    for(i = 0; i < pool->n_strs; ++i)
-    {
-        n = strlen(pool->strs[i])+1;
-        memmove(s,pool->strs[i],n);
-        s += n;
-    }
-    if(res_block_len)
-        *res_block_len = n_res;
-    return res;
+    char *p;
+    if(!pool || !s)
+        return NULL;
+	if(!pool->dict)
+		pool->dict = STRUCT_ALLOC(*pool->dict);
+    p = strpool_find(pool,s);
+    if(p)
+        return p;
+	p = strdup(s);
+    hash_insert(pool->dict,p,p);
+    return p;
+}
+
+static int str_in_block(StrPool *p, char *s)
+{
+	int i;
+	for(i = 0; i < ap_size(&p->strblocks); ++i) 
+	{
+		StrBlock *sb = p->strblocks[i];
+		if(INRANGE(s,sb->block,sb->block+sb->n))
+			return 1;
+	}
+	return 0;
+}
+
+
+void strpool_cleanup(StrPool *p)
+{
+	int i;
+
+	if(!p)
+		return;
+
+	for(i = 0; i < DEREF(p->dict,n_elts); ++i)
+	{
+		HashNode *n = p->dict->elts + i;
+		if(!n->key)
+			continue;
+		if(!str_in_block(p,n->key))
+			continue;
+		free(n->key);
+	}
+
+	for(i = 0; i < ap_size(&p->strblocks); ++i)
+		free(p->strblocks[i]);
+	ap_destroy(&p->strblocks,NULL);
+	free_safe(p->dict);
+	p->dict = 0;
+}
+
+int strpool_write(char *fn, StrPool *pool)
+{
+	int n;
+	int i;
+	File *fp = absfile_open_write(fn);
+
+    if(!DEREF(pool,dict) || !fn)
+        return -1;
+	
+	// write the hashtable
+	if(!int_binwrite(fp,pool->dict->n_used)
+	   || !array_binwrite(fp,pool->dict->elts,pool->dict->n_elts))
+		return -1;
+
+	n = 0;
+	for(i = 0; i < pool->dict->n_elts; ++i)
+	{
+		HashNode *node = pool->dict->elts + i;
+		if(!node->key)
+			continue;
+		n += strlen(node->key) + 1;
+	}
+	
+	if(!int_binwrite(fp,n))
+		return -1;
+	
+	for(i = 0; i < pool->dict->n_elts; ++i)
+	{
+		HashNode *node = pool->dict->elts + i;
+		int len;
+
+		if(!node->key)
+			continue;
+		len = strlen(node->key);
+		abfwrite(node->key,len+1,1,fp);                 // str data
+	}
+
+	abfclose(fp);
+
+	return !(i == pool->dict->n_elts);
+}
+
+int strpool_read(char *fn, StrPool *pool, SerializeCtxt *ctxt)
+{
+	StrBlock *sb;
+	char *s;
+	char *strblock = 0;
+	int n;
+	int i;
+	File *fp = absfile_open_read(fn);
+
+    if(!pool || !fp)
+        return -1;
+
+	assert(!pool->dict);
+	pool->dict = STRUCT_ALLOC(*pool->dict);
+
+	if(!int_binread(fp,&pool->dict->n_used)
+	   || !array_binread(fp,&pool->dict->elts,&pool->dict->n_elts)) // read the hashtable
+		return -1;
+
+	if(!array_binread(fp,&strblock,&n)) // blob of string data
+		return -1;
+	
+	sb = calloc(sizeof(*sb),1);
+	sb->block = strblock;
+	sb->n = n;
+	ap_push(&pool->strblocks,sb);
+
+	// fixup
+	s = strblock;
+	for(i = 0; i < pool->dict->n_elts; ++i)
+	{
+		HashNode *node = pool->dict->elts + i;
+		if(!node->key)
+			continue;
+		serialize_fixup_add_ptr(ctxt,node->key,s);
+		node->key = s;
+		s += strlen(s)+1;
+		assert(s <= strblock + n);
+	}
+
+	return 0;
 }
 
 int str_vsprintf(char **dst,char *fmt,va_list args)
@@ -227,22 +277,22 @@ int strpool_test(void)
     int i;
 
     printf("testing strpool...");
-    TEST(!strpool_find_str(&pool,"abc"));
-    p=strpool_find_add_str(&pool,"abc");
+    TEST(!strpool_find(&pool,"abc"));
+    p=strpool_add(&pool,"abc");
     TEST(p);
-    TEST(0==strcmp("abc",strpool_find_add_str(&pool,"abc")));
-    TEST(p == strpool_find_add_str(&pool,"abc"));
+    TEST(0==strcmp("abc",strpool_add(&pool,"abc")));
+    TEST(p == strpool_add(&pool,"abc"));
     
     for(i = 0; i < 100; ++i)
     {
         int j;
         char tmp[128];
         sprintf(tmp,"%i",i);
-        strpool_find_add_str(&pool,tmp);
+        strpool_add(&pool,tmp);
         for(j = 0; j <= i; ++j)
         {
             sprintf(tmp,"%i",j);
-            TEST(strpool_find_str(&pool,tmp));
+            TEST(strpool_find(&pool,tmp));
         }
     }
     strpool_cleanup(&pool);

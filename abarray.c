@@ -8,15 +8,27 @@
  ***************************************************************************/
 #include "abutil.h"
 
-// ----------------------------------------
-// void*
+// *************************************************************************
+// standard containers
+// *************************************************************************
 
 #define TYPE_T void*
 #define TYPE_FUNC_PREFIX ap
-#include "abarrayx.h"
+#include "abarrayx.c"
 #undef TYPE_T
 #undef TYPE_FUNC_PREFIX
 
+#define TYPE_T char*
+#define TYPE_FUNC_PREFIX astr
+#include "abarrayx.c"
+#undef TYPE_T
+#undef TYPE_FUNC_PREFIX
+
+#define TYPE_T int
+#define TYPE_FUNC_PREFIX aint
+#include "abarrayx.c"
+#undef TYPE_T
+#undef TYPE_FUNC_PREFIX
 
 
 // *************************************************************************

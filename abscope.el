@@ -1,3 +1,20 @@
+;;----------------------------------------
+;; todos:
+;; - function params
+;; - struct members (AC)
+;; - global string pool
+;;
+;; exe todos:
+;; - unit test everything (wire up ptrhash tests)
+;; - standardize 0 as success. (e.g. in serialize)
+;; - shrink footprint.
+;; - add strings.abs : for searching all text strings
+;; - context should grab entire line.
+;; - editors/MultiEditTable.h/(209):editors/MultiEditTable.h/(14):struct METable; : misparsed?
+;; - recursive search/call graph
+;; - faster exe load/load on start
+;;----------------------------------------
+
 ;;; abscope.el --- functions for interacting with the abscope tags system
 ;;
 ;; Copyright (C) 2009
@@ -7,12 +24,12 @@
 ;; Version: 0.0a
 ;;
 ;; Installation:
-;; - make sure the abscope binary is in the path somewhere, or set `abscope-exe' to its location
+;; - make sure the abscope binary is in the path somewhere, or set `abscope-exe'
 ;; - load the abscope library
 ;; - call abscope-scan-src on the directory you'd like to scan (customize abscope-scan-args if necessary. -E dir is the most likely thing to add for excluding certain directories)
 ;;
 ;; Running:
-;; All tag queries are pcre regular expressions (http://www.pcre.org/), and are case insensitive.
+;; All tag queries are pcre regular expressions (http://www.pcre.org/), case insensitive.
 ;;
 ;; The results of tag queries are printed to a file in the project
 ;; directory named the value of `abscope-file'. usually
@@ -53,19 +70,6 @@
 ;; (add-to-list 'auto-mode-alist '("\\.org\\'" . org-mode))
 ;;----------------------------------------
 
-;;----------------------------------------
-;; todos:
-;; - function params
-;; - global string pool
-;;
-;; exe todos:
-;; - shrink footprint.
-;; - add strings.abs : for searching all text strings
-;; - context should grab entire line.
-;; - editors/MultiEditTable.h/(209):editors/MultiEditTable.h/(14):struct METable; : misparsed?
-;; - recursive search/call graph
-;; - faster exe load/load on start
-;;----------------------------------------
 (require 'cl)
 
 
@@ -130,7 +134,8 @@
 (make-variable-buffer-local 'abscope-tags-all)
 
 (defun abscope-scan-src (dir)
-  "perform a scan on the passed directory using the default options. see `abscope-scan-args'"
+  "perform a scan on the passed directory using the default options. see `abscope-scan-args'
+put #SCAN-OPTS: at the start of your query buffer to specify project specific options"
   (interactive "Ddir:")
   (save-window-excursion
 	(find-file dir)
@@ -139,7 +144,7 @@
 	   (beginning-of-buffer)
 	   (if (re-search-forward "#SCAN-OPTS: \\(.*\\)" nil t)
 		   (setq addl-args (split-string-and-unquote (match-string-no-properties 1))))
-	   (set-process-sentinel (eval `(start-process (format "abscope-scan<%s>" dir) nil ,abscope-exe ,@abscope-scan-args ,@addl-args)) (lambda (p e) (message (format "%s `%s'" p e)) ))
+	   (set-process-sentinel (eval `(start-process (format "abscope-scan<%s>" dir) nil ,abscope-exe ,@abscope-scan-args ,@addl-args)) (lambda (p e) (message (format "done: %s `%s'" p e)) ))
 	))))
 			   
 
@@ -258,7 +263,7 @@
   (with-abscope-buffer
     (if (not (abs-running-p))
         (save-window-excursion
-          (setq abscope-process (start-process "abscope" (current-buffer) abscope-exe "-t" "-Qa" "-"))
+          (setq abscope-process (start-process "abscope" (current-buffer) abscope-exe "-Qa" "-"))
           (setq abscope-tq (tq-create abscope-process))
 		  (message "%s not running. launching..." abscope-exe)
 		  (sleep-for 0 750) ;; stall for a bit to let the message show/process launch.
@@ -279,9 +284,9 @@
   "kill abscope process in current project"
   (interactive)
   (with-abscope-buffer
-   (if abscope-process
+   (if (and abscope-process (not (eq (process-status abscope-process) 'run)))
 	   (kill-process abscope-process)
-	 (message "no process to kill"))))
+	 )))
 
 (defun abscope-clear ()
   "erase the abscope buffer"
@@ -870,7 +875,6 @@ l.ine: actual text line where the tag was parsed"
   "helper for auto-completing a word"
   (cond 
    ((re-search-backward "//" (line-beginning-position) t) nil)
-   ((string-match "($" ac-prefix) (abscope-autocomplete-candidate-functions))
    (t
 	(with-abscope-buffer
 	 (all-completions ac-prefix abscope-tags-all))

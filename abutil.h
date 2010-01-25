@@ -19,16 +19,19 @@
 //#include <winsock2.h>
 
 #pragma warning(disable:6308) // realloc returns NULL
+#pragma warning(disable:6011) // Dereferencing NULL pointer (todo:turn off only for allocs)
+#define ABINLINE static __forceinline
+
+#define DEBUGBREAK() __debugbreak()
 
 #ifdef _DEBUG 
 #include <winbase.h>  // for IsDebuggerPresent
-#define break_if_debugging() { static int skip_this_bp = 0; ((!skip_this_bp && (IsDebuggerPresent()))?DebugBreak(),1:1); }
+#define break_if_debugging() ((IsDebuggerPresent())?DEBUGBREAK(),1:1,1)
 #else
 
 #define break_if_debugging() 0
 #endif
-
-#define abassert(C) {break_if_debugging();assert(C);}
+#define abassert(C) ((!(C))?(break_if_debugging(),assert(C),0):1) 
 typedef enum ErrorLvl
 {
     ErrorLvl_None,
@@ -50,8 +53,6 @@ typedef volatile __int64 VS64;
 typedef volatile unsigned __int64 VU64;
 typedef unsigned char U8;
 typedef signed char S8;
-
-#define ABINLINE static __forceinline
 
 #define _CRT_SECURE_NO_WARNINGS 1
 #include <stdio.h>
@@ -107,6 +108,8 @@ int match_ext(char *fn, char *ext); // pass "c" not ".c"
 
 typedef BOOL (*dirscan_fp)(char *filename, void *ctxt);
 void scan_dir(DirScan *d, const char *adir, int recurse_dir,dirscan_fp add_file_callback, void *callback_ctxt);
+void dirscan_cleanup(DirScan *ds);
+
 
 #define stracpy(DST,SRC) (strncpy((DST),SRC,DIMOF(DST)),(DST)[DIMOF(DST)-1]=0,(DST))
 #define stricmp _stricmp
@@ -169,5 +172,5 @@ void abfree(void *p);
 #define POW_OF_2(N) (((N) & ((N)-1)) == 0)
 ABINLINE void free_safe(void *p) { if(p) free(p);}
 char *last_error();
-
+#define STRUCT_ALLOC(TYPE) calloc(sizeof(TYPE),1)
 #endif //ABUTIL_H

@@ -7,6 +7,7 @@
  * - add some measurement of performance problems (e.g. probe miss) 
  ***************************************************************************/
 #include "abhash.h"
+#include "abarray.h"
 #pragma warning(push)
 #pragma warning(disable:6011)
 //-----------------------------------------------------------------------------
@@ -121,6 +122,8 @@ HashNode *hash_findnode_prehash(HashTable *ht, char *key,U32 hash)
 HashNode *hash_findnode(HashTable *ht, char *key)
 {
     int hash;
+	if(!ht)
+		return NULL;
     if(!ht->hashfp)
         ht->hashfp = str_hashfunc;
     hash = ht->hashfp(key, ht->ctxt);
@@ -133,11 +136,6 @@ void *hash_find(HashTable *ht, char *key)
     if(n)
         return n->p;
     return NULL;
-}
-
-BOOL hash_exists(HashTable *ht, char *key)
-{
-    return hash_findnode(ht,key) != NULL;
 }
 
 void hash_resize(HashTable *ht, int n_new)
@@ -264,18 +262,109 @@ void hash_cleanup(HashTable *ht, HashCleanupFp *cb)
     }
 }
 
+void hash_free_cleanupcb(HashNode *n, void *ctxt)
+{
+	ctxt;
+	free_safe(n->key);
+	free_safe(n->p);
+}
+
+U32 int_hashfunc(char *key, void *ctxt)
+{
+	ctxt;
+	return MurmurHash2(key,sizeof(int),0);
+}
+
+int int_cmpfunc(const void*l, const void*r)
+{
+	int lhs = *((int*)l);
+	int rhs = *((int*)r);
+	return lhs - rhs;
+}
+
+void inthash_init(HashTable *ht, void *ctxt)
+{
+	if(!ht)
+		return;
+	assert(!ht->elts && !ht->ctxt);
+	ht->hashfp = int_hashfunc;
+	ht->cmpfp =  int_cmpfunc;
+	ht->ctxt = ctxt;
+}
+
+U32 ptr_hashfunc(char *key, void *ctxt)
+{
+	ctxt;
+	return MurmurHash2((char*)&key,sizeof(void*),0);
+}
+
+int ptr_cmpfunc(const void*l, const void*r)
+{
+	return (char*)l - (char*)r;
+}
+
+void ptrhash_init(HashTable *ht, void *ctxt)
+{
+	if(!ht)
+		return;
+	assert(!ht->elts && !ht->ctxt);
+	ht->hashfp = ptr_hashfunc;
+	ht->cmpfp  = ptr_cmpfunc;
+	ht->ctxt   = ctxt;
+}
+
 
 #define TEST(COND) if(!(COND)) {fprintf(stderr,#COND ": failed\n"); break_if_debugging(); return -1;}
 
-int hash_test()
+int ptrhash_test()
 {
     int i;
     HashTable hash_table = {0};
     HashTable *ht = &hash_table;
-    TEST(!hash_exists(ht,"foo"));
+	char *foo = "foo";
+	char **strs = 0;
+
+	ptrhash_init(ht,0);
+
+    TEST(!ptrhash_find(ht,foo));
+    TEST(ptrhash_insert(ht,foo,ht));
+    TEST(!ptrhash_insert(ht,foo,ht)); // no dupes
+    TEST(ptrhash_find(ht,foo));
+    TEST(ht == ptrhash_find(ht,foo));
+    
+    for(i = 0; i< 100; ++i)
+    {
+        char *t = strdup("foo");
+		astr_push(&strs,t);  
+        TEST(ptrhash_insert(ht,t,t+1));
+        TEST(!ptrhash_insert(ht,t,t+1));
+        TEST(ptrhash_find(ht,t) == t+1);
+    }
+
+    for(i = 0; i < astr_size(&strs); ++i)
+    {
+		char *s = strs[i];
+        char *t = ptrhash_find(ht,s);
+        TEST(t);
+        TEST(s == t-1);
+        free(t-1);
+    }
+
+	return 0;
+}
+
+
+int hash_test()
+{
+	int r = 0;
+    int i;
+    HashTable hash_table = {0};
+    HashTable *ht = &hash_table;
+	printf("testing hashtable...");
+    TEST(!hash_find(ht,"foo"));
     TEST(hash_insert(ht,"foo",ht));
     TEST(!hash_insert(ht,"foo",ht)); // no dupes
-    TEST(hash_exists(ht,"foo"));
+    TEST(hash_find(ht,"foo"));
     TEST(ht == hash_find(ht,"foo"));
     
     for(i = 0; i< 100; ++i)
@@ -286,7 +375,7 @@ int hash_test()
         t = strdup(tmp);
         TEST(hash_insert(ht,t,t));
         TEST(!hash_insert(ht,t,t));
-        TEST(hash_exists(ht,t));
+        TEST(hash_find(ht,t));
     }
 
     for(i = 0; i< 100; ++i)
@@ -299,7 +388,14 @@ int hash_test()
         TEST(0==strcmp(t,tmp));
         free(t);
     }
+
+	r += ptrhash_test();
+
+	printf("done.\n");
+
+
     return 0;
 }
 
 #pragma warning(pop)
+

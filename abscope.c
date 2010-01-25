@@ -9,10 +9,12 @@
  * - fixup of refs is slowest part of load. save those
  ***************************************************************************/
 #include "abutil.h"
+#include "process.h" // _beginthread
 #include "abscope.h"
 #include "abhash.h"
 #include "abtree.h"
 #include "c_parse.h"
+#include "abarray.h"
 
 int g_verbose = 0;
 
@@ -51,7 +53,7 @@ BOOL dirscan_accept_file(char *path, char **exclude_dirs)
 static int32_t ABS_FILE_VERSION = 0x20090715;
 File *absfile_open_write(char *fn)
 {
-    File *fp = abfopen(fn,File_W);
+    File *fp = abfopen(fn,File_W,0);
     if(!fp)
         return 0;
     if(1 != abfwrite(&ABS_FILE_VERSION,sizeof(ABS_FILE_VERSION),1,fp))
@@ -66,7 +68,7 @@ File *absfile_open_write(char *fn)
 File *absfile_open_read(char *fn)
 {
     int32_t version = 0;
-    File *fp = abfopen(fn,File_R);
+    File *fp = abfopen(fn,File_R,0);
     if(!fp)
         return 0;
     abfread(&version,sizeof(ABS_FILE_VERSION),1,fp);
@@ -88,6 +90,7 @@ static int abscope_test()
 {
     printf("TESTING\n");
 
+	abfile_test();
     TEST(0==abarray_test());
     TEST(0==avltree_test());
     TEST(0==hash_test()); 
@@ -95,6 +98,7 @@ static int abscope_test()
     TEST(0==test_locinfo());
     TEST(0==c_parse_test());
 
+	break_if_debugging();
     return 0;
 }
 
@@ -123,6 +127,9 @@ static int c_query_flags_from_str(char *a_in)
         case 'S':
             c_query_flags |= CQueryFlag_Structrefs;
             break;
+        case 'm':
+            c_query_flags |= CQueryFlag_Structmbrs;
+            break;
         case 'f':
             c_query_flags |= CQueryFlag_Funcs;
             break;
@@ -150,6 +157,8 @@ static int c_query_flags_from_str(char *a_in)
     return c_query_flags;
 }
 
+static int write_tags = 0;
+
 void write_parse_tags(FILE *fp, char *name, Parse *p)
 {
 	int i;
@@ -166,10 +175,62 @@ void write_parse_tags(FILE *fp, char *name, Parse *p)
 	fprintf(fp,"))\n");
 }
 
+static int process_files(CParse *cp, char **files, int n_files)
+{
+	int res = 0;
+	res += c_parse_files(cp,files,n_files);
+	res += c_parse_write(cp);
+	return res;
+}
+
+static char **modified_srcfiles = 0;
+
+static void check_srcfiles(CParse *cp)
+{
+	int i;
+	char **modified = 0;
+
+	if(modified_srcfiles)
+		return;
+
+	for(i = 0;i < cp->srcfiles.n_locs; ++i)
+	{
+		LocInfo *li = cp->srcfiles.locs + i;
+		struct stat st = {0};
+		SrcInfo *si = (SrcInfo*)li->p;
+		
+		if(!si)
+			continue;
+		
+		if(0!=stat(li->fname,&st))
+			continue;
+		
+		if(st.st_mtime <= si->st_mtime)
+			continue;
+
+		astr_push(&modified,li->fname);
+	}
+
+	// pass this to foreground thread.
+	modified_srcfiles = modified;
+}
+
+
+static void check_srcfiles_thread(void *p)
+{
+	CParse *cp = (CParse*)p;
+	if(!p)
+		return;
+	for(;;)
+	{
+		check_srcfiles(cp);
+		Sleep(10);
+	}
+}
+
 
 int main(int argc, char **argv)
 {
-	int write_tags = 0;
     BOOL loop_query = 0;
     S64 query_timer;
     double query_timer_load = 0;
@@ -178,8 +239,9 @@ int main(int argc, char **argv)
     int res = 0;
     int print_timers = 0;
     S64 timer_start;
-    DirScan dir_scan = {0};
-    char *dir_scan_dir = NULL;
+    char *dirscan_dname = NULL;
+	DirScan dir_scan = {0};
+
     int i;
     struct CParse *cp = &g_cp;
     int process = 0;
@@ -264,7 +326,7 @@ int main(int argc, char **argv)
                 break;
             case 'R':
                 i++;
-                dir_scan_dir = (i < argc && argv[i] && *argv[i] != '-')?argv[i]:".";
+                dirscan_dname = (i < argc && argv[i] && *argv[i] != '-')?argv[i]:".";
                 process = 1;
                 break;
             case 'T':
@@ -277,7 +339,7 @@ int main(int argc, char **argv)
                     fprintf(stderr,"failed to parse %s",argv[i]);
                     return -1;
                 }
-                c_on_processing_finished(cp);
+                c_parse_write(cp);
                 i++;
                 break;
             };
@@ -286,49 +348,22 @@ int main(int argc, char **argv)
         };
     }
 
-    if(dir_scan_dir)
-        scan_dir(&dir_scan,dir_scan_dir,1,dirscan_accept_file,exclude_dirs);
-
     if(process)
     {
+		if(dirscan_dname)
+			scan_dir(&dir_scan,dirscan_dname,1,dirscan_accept_file,exclude_dirs);
+
         printf("processing %i files\n", dir_scan.n_files);
-        if(print_timers)
-        {
-            printf("scanning dirs took %f seconds\n", timer_diffelapsed(timer_start));
-            timer_start = timer_get();
-        }
-        
-        res += c_parse_files(cp,&dir_scan);
-        res += c_on_processing_finished(cp);
+		res += process_files(cp,dir_scan.files,dir_scan.n_files);
+
+		dirscan_cleanup(&dir_scan);
     }
 
-	if(c_load(cp)<0)
+	
+	if(c_parse_load(cp)<0)
 	{
 		fprintf(stderr,"failed to load tags. exiting");
 		return -1;
-	}
-
-	if(write_tags)
-	{
-		FILE *fp = fopen("tags.el","w");
-		if(!fp)
-		{
-			fprintf(stderr,"could't open tags.el for writing, err:%s\n",last_error());
-			return -1;
-		}
-		
-		fprintf(fp,"'(\n");
-		write_parse_tags(fp,"structs",&cp->structs);
-//		write_parse_tags(fp,"structrefs",&cp->structrefs);
-		write_parse_tags(fp,"funcs",&cp->funcs);
-//		write_parse_tags(fp,"funcrefs",&cp->funcrefs);
-		write_parse_tags(fp,"defines",&cp->defines);
-		write_parse_tags(fp,"enums",&cp->enums);
-//		write_parse_tags(fp,"vars",&cp->vars);
-		write_parse_tags(fp,"srcfiles",&cp->srcfiles);
-		write_parse_tags(fp,"cryptic",&cp->cryptic);
-		fprintf(fp,"\n)\n");
-		fclose(fp);
 	}
 
     if(query_str)
@@ -338,7 +373,11 @@ int main(int argc, char **argv)
         char fld_buf[32];
         char flag_buf[32];
         if(0==strcmp(query_str,"-"))
+		{
             loop_query = TRUE;
+			// _beginthread(check_srcfiles_thread,0,cp); // monitors changes to srcfiles  
+		}
+		
 
         query_timer = timer_get();
         query_timer_load = timer_diffelapsed(query_timer);
@@ -366,6 +405,16 @@ int main(int argc, char **argv)
             query_timer = timer_get();
             res = c_query(cp,query_str,c_query_flags,field_flags);
             query_timer_query = timer_diffelapsed(query_timer);
+
+			// check for file modifications
+			if(modified_srcfiles)
+			{
+				char **modfiles = modified_srcfiles; // consume the data from the bg thread
+				int n = astr_size(&modfiles);
+				modified_srcfiles = 0;
+				c_remove_files(cp,modfiles,n);
+				c_parse_files(cp,modfiles,n);
+			}
         } while(loop_query);
     }
 

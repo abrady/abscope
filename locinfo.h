@@ -60,14 +60,14 @@ typedef struct LocInfo
     char *tag;
     char *referrer;
     char *context;
-    char *file;
+    char *fname;
     int lineno;
     char *line;
 
     Parse *child;
-    
-    // scratch pointer
-    struct LocInfo *ref;
+	
+    struct LocInfo *ref;    // scratch pointer
+	void *p;				// extra type-specific data
 } LocInfo;
 
 typedef struct TagRef
@@ -78,28 +78,30 @@ typedef struct TagRef
 
 typedef struct Parse
 {
-    StrPool strs;
     struct LocInfo *locs;
     int       n_locs;
+	StrPool *pool;
 } Parse;
 
 #define TYPE_T LocInfo
 #define TYPE_FUNC_PREFIX ali
+#define ABARRAY_SERIALIZE
 #include "abarrayx.h"
 #undef TYPE_T
 #undef TYPE_FUNC_PREFIX
+#undef ABARRAY_SERIALIZE
 
-
-int absfile_write_parse(char *fn, Parse *p);
-int absfile_read_parse(char *fn, Parse *p);
+int parse_filewrite(char *fn, Parse *p);
+int parse_fileread(char *fn, Parse *p, SerializeCtxt *ctxt);
+int parse_fixup(Parse *p, SerializeCtxt *ctxt);
 
 // void locinfo_print(LocInfo *li);
 // int locinfo_vprintf(LocInfo *li,char *fmt,va_list args);
 // int locinfo_printf(LocInfo *li,char *fmt,...);
 
-int parse_add_locinfo(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context);
-int parse_add_locinfof(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context, ...);
-int parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context,va_list args);
+LocInfo* parse_add_locinfo(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context);
+LocInfo* parse_add_locinfof(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context, ...);
+LocInfo* parse_add_locinfov(Parse *p,char *filename, int lineno, char *line, char *tag, char *referrer, char *context,va_list args);
 int parse_locinfos_from_ref(Parse *p, char *ref, LocInfo ***res);
 int parse_locinfos_from_context(Parse *p, char *ref, LocInfo ***res);
 int parse_print_search(Parse *p,char *tag, LocInfoField flds);

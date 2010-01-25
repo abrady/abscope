@@ -36,10 +36,17 @@ TYPE_T* ADECL(create)(int capacity);
 void ADECL(destroy)(TYPE_T** ha, ADECL(destroyelt_fp) *fp);
 int ADECL(size)(TYPE_T const * const * ha);
 void ADECL(setsize)(TYPE_T** ha, int size);
+
+// push is interesting semantically. most people expect it to take a param, but 
+// having push take a struct as a param and doing a memcpy is problematic
+// but copying a pointer is okay. so if you have an array of Foo structs, use push
+// if you have an array of pointers to Foo (Foo*), you may want to use the preprocessor:
+// #define pfoo_push pfoo_push_by_cp 
 TYPE_T* ADECL(push)(TYPE_T **ha);
 TYPE_T* ADECL(pushn)(TYPE_T **ha, int n);
 TYPE_T* ADECL(pushfront)(TYPE_T **ha);
 int ADECL(push_by_cp)(TYPE_T **ha, TYPE_T b);
+
 TYPE_T* ADECL(pop)(TYPE_T **ha);
 TYPE_T* ADECL(top)(TYPE_T **ha);
 void ADECL(cp)(TYPE_T **hdest,TYPE_T const * const *hsrc,int n);
@@ -50,4 +57,10 @@ void ADECL(rm)(TYPE_T **ha, int offset, int n);
 int ADECL(find)(TYPE_T **ha, TYPE_T *b, ADECL(cmp_fp) *cmp, void *ctxt);
 void ADECL(foreach_ctxt)(TYPE_T **ha, ADECL(foreach_ctxt_fp) *fp, void *ctxt);
 void ADECL(foreach)(TYPE_T **ha, ADECL(foreach_fp) *fp);
+
+#ifdef ABARRAY_SERIALIZE
+int ADECL(binwrite)(File *fp, TYPE_T **ha);
+int ADECL(binread)(File *fp, TYPE_T **ha);
+#endif
+
 

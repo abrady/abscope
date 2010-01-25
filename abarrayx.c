@@ -18,6 +18,8 @@
 #error "TYPE_FUNC_PREFIX not defined"
 #endif
 
+#ifndef ABARRAYHDR
+#define ABARRAYHDR
 typedef struct AbArrayHdr
 {
     int size;
@@ -26,7 +28,7 @@ typedef struct AbArrayHdr
 	U32 flags;
 } AbArrayHdr;
 STATIC_ASSERT(!(sizeof(AbArrayHdr)%sizeof(void*))); // alignment
-
+#endif
 
 #define ABARRAY_MEMSIZE(CAP) ((CAP)*(sizeof(TYPE_T))+sizeof(AbArrayHdr))
 #define ABARRAY_FROM_T(P) (P?((AbArrayHdr*)(((U8*)(P))- sizeof(AbArrayHdr))):0)
@@ -38,7 +40,7 @@ STATIC_ASSERT(!(sizeof(AbArrayHdr)%sizeof(void*))); // alignment
 static HashPtr *S_ADECL(abarray_tracker);
 static void S_ADECL(check_handle)(void *P)
 {
-    if(P && !hash_exists(&S_ADECL(abarray_tracker),P))
+    if(P && !hash_find(&S_ADECL(abarray_tracker),P))
         assertm(0,"unknown handle %p passed to Array",P);
 }
 
@@ -390,9 +392,46 @@ void ADECL(foreach)(TYPE_T **ha, ADECL(foreach_fp) *fp)
         fp(&(*ha)[i]);
 }
 
+#ifdef ABARRAY_SERIALIZE
+int ADECL(binwrite)(File *fp, TYPE_T **ha)
+{
+	AbArrayHdr *a;
+    assert(ha);
+    if(!ha)
+        return 0;
+    a = ABARRAY_FROM_T(*ha);        
+	if(!a)
+		return 0;
+    ABARRAY_CHECK_HANDLE(a);
+	return mem_binwrite(fp,a,sizeof(*a)+sizeof(TYPE_T)*a->size,1);
+}
+#endif
+
+#ifdef ABARRAY_SERIALIZE
+int ADECL(binread)(File *fp, TYPE_T **ha)
+{
+	AbArrayHdr *a = 0;
+    assert(ha);
+    if(!ha)
+        return 0;
+	if(!mem_binread(fp,&a,NULL,1))
+		return 0;
+    ABARRAY_CHECK_HANDLE(a);
+	*ha = T_FROM_ABARRAY(a);
+	return 1;
+}
+#endif
+
+
 #undef ABARRAY_TRACK_HANDLE
 #undef ABARRAY_UNTRACK_HANDLE
 #undef ABARRAY_CHECK_HANDLE
 
+#undef ABARRAY_MEMSIZE
+#undef ABARRAY_FROM_T
+#undef T_FROM_ABARRAY
+#undef ARRAY_MIN_CAPACITY
+
 #undef TYPE_T 
 #undef TYPE_FUNC_PREFIX 
+
