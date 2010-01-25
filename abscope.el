@@ -102,6 +102,7 @@
 	  (defalias 'abqs 'abscope-query-struct)
 	  (defalias 'abqp 'abscope-query-cryptic)
 	  (defalias 'abqd 'abscope-query-define)
+	  (defalias 'abqe 'abscope-query-enum)
 	  (defalias 'abqx 'abscope-query-context)
 
 	  ;; jump helpers
@@ -111,6 +112,7 @@
 	  (defalias 'abjs 'abscope-jump-struct)
 	  (defalias 'abjp 'abscope-jump-cryptic)
 	  (defalias 'abjd 'abscope-jump-define)
+	  (defalias 'abje 'abscope-jump-enum)
 
 	  ;; auto complete
 	  (defalias 'abfm 'abscope-find-members)
@@ -506,12 +508,16 @@ l.ine: actual text line where the tag was parsed"
 	(?d 'defines)
 	))
 
-(defun abs-query-read (prompt field)
+(defun abs-query-read (prompt &rest fields)
   (completing-read prompt 
 				   ;; jump to abscope buf to get list of tags
 				   (with-abscope-buffer
 					(abs-reload-tags)
-					(if field (cadr (assoc field abscope-tags)) abscope-tags-all))
+					(if fields
+						;; big list of all matching fields
+						(loop for field in fields 
+							  append (cadr (assoc field abscope-tags)))
+					  abscope-tags-all))
 				   nil nil 
 				   ;; get symbol at point
 				   (abscope-default-input)))
@@ -539,13 +545,13 @@ l.ine: actual text line where the tag was parsed"
   )
 (defun abscope-query-function (tag)
   "find a function"
-  (interactive (list (abs-query-read "func to search for:" 'funcs)))
+  (interactive (list (abs-query-read "func to search for:" 'funcs 'defines)))
   (abscope-query "f" tag)
   )
 
 (defun abscope-query-funcref (tag)
   "find a function ref"
-  (interactive (list (abs-query-read "func to search for:" 'funcs)))
+  (interactive (list (abs-query-read "func to search for:" 'funcs 'defines)))
   (abscope-query "F" tag)
   )
 
@@ -565,6 +571,12 @@ l.ine: actual text line where the tag was parsed"
   "find define"
   (interactive (list (abs-query-read "The tag to search for:" 'defines)))
   (abscope-query "ad" tag)
+  )
+
+(defun abscope-query-enum (tag)
+  "find an enum"
+  (interactive (list (abs-query-read "The tag to search for:" 'defines)))
+  (abscope-query "e" tag)
   )
 
 (defun abscope-query-context (tag)
@@ -644,6 +656,11 @@ l.ine: actual text line where the tag was parsed"
   "jump #define"
   (interactive (list (abs-query-read "define:" 'defines)))
   (abscope-jump tag "d"))
+
+(defun abscope-jump-enum (tag)
+  "jump enum"
+  (interactive (list (abs-query-read "enum:" 'defines)))
+  (abscope-jump tag "e"))
 
 
 ;; *************************************************************************
@@ -874,11 +891,22 @@ l.ine: actual text line where the tag was parsed"
 (defun abscope-autocomplete-candidate-words ()
   "helper for auto-completing a word"
   (cond 
+   ;; excludes
    ((re-search-backward "//" (line-beginning-position) t) nil)
+   ((oddp (count-matches "\\\"" (line-beginning-position) (point))) nil) ;; in a string
+   ((save-excursion 
+	  (goto-char ac-point)
+	  (or (looking-back "typedef \\(struct\\)? "))))
+   ;; context specific matches
+   ((string-match "($" ac-prefix) (abscope-autocomplete-candidate-functions))
    (t
-	(with-abscope-buffer
-	 (all-completions ac-prefix abscope-tags-all))
-	)))
+	(if (> (length ac-prefix) 3)
+		(append
+		 (with-abscope-buffer
+		  (all-completions ac-prefix abscope-tags-all))
+		 (ac-candidate-words-in-buffer))
+	  ))
+   ))
    
 
 (defvar abscope-autocomplete-sources '((candidates . abscope-autocomplete-candidate-words)))
@@ -888,6 +916,5 @@ l.ine: actual text line where the tag was parsed"
   "set up the auto complete variables"
   (setq ac-sources '(
 					 abscope-autocomplete-sources
-					 ac-source-words-in-buffer
 					 )))
 (provide 'abscope)
