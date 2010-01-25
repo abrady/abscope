@@ -299,7 +299,7 @@ int c_parse_write(CParse *cp)
 	
 #define WRITE_PARSE(P)  \
 	{					\
-		printf("%i " #P, cp->P.n_locs);			\
+		printf("wrote %i " #P, cp->P.n_locs);			\
 		if(0 != parse_filewrite(".abs/c_" #P ".abs",&cp-> P))	\
 		{														\
 			printf("FAILED");									\
@@ -345,15 +345,15 @@ int c_parse_load(CParse *cp)
 	if(0 != strpool_read(".abs/strpool.abs",pool,&ctxt))
 		return -1;
 
-#define READ_PARSE(P)  \
-	{					\
-		printf("%i " #P, cp->P.n_locs);			\
-		if(0 != parse_fileread(".abs/c_" #P ".abs",&cp-> P, &ctxt))	\
-		{														\
-			printf("FAILED");									\
-			res = -1;											\
-		}														\
-		printf("\n");											\
+#define READ_PARSE(P)										\
+	{																\
+		if(g_verbose) printf("reading " #P);							\
+		if(0 != parse_fileread(".abs/c_" #P ".abs",&cp-> P, &ctxt))		\
+		{																\
+			printf(".abs/c_" #P ".abs read FAILED");					\
+			res = -1;													\
+		}																\
+		if(g_verbose) printf(" %i locs\n",cp->P.n_locs);				\
 	}
 
 	READ_PARSE(structs);
