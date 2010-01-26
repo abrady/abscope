@@ -113,14 +113,14 @@ typedef enum CQueryFlag
     CQueryFlag_None       = 0,     // search for Foo matches:
     CQueryFlag_Structs    = 1<<0,  // struct Foo {}; enum Foo {}; 
     CQueryFlag_Structrefs = 1<<1,  // Foo a;
-    CQueryFlag_Structmbrs = 1<<1,  // struct { int foo; };
-    CQueryFlag_Funcs      = 1<<2,  // int foo() {}
-    CQueryFlag_Funcrefs   = 1<<3,  // int bar() { foo(); }
-    CQueryFlag_Defines    = 1<<4,  // #define FOO
-    CQueryFlag_Enums      = 1<<5,  // enum Bar { FOO } Foo;
-    CQueryFlag_Srcfile    = 1<<6,  // foo.c
-    CQueryFlag_Vars       = 1<<7,  
-    CQueryFlag_Cryptic    = 1<<8,
+    CQueryFlag_Structmbrs = 1<<2,  // struct { int foo; };
+    CQueryFlag_Funcs      = 1<<3,  // int foo() {}
+    CQueryFlag_Funcrefs   = 1<<4,  // int bar() { foo(); }
+    CQueryFlag_Defines    = 1<<5,  // #define FOO
+    CQueryFlag_Enums      = 1<<6,  // enum Bar { FOO } Foo;
+    CQueryFlag_Srcfile    = 1<<7,  // foo.c
+    CQueryFlag_Vars       = 1<<8,  
+    CQueryFlag_Cryptic    = 1<<9,
 } CQueryFlag;
 
 int c_query(CParse *cp, char *tag, int query_flags, LocInfoField flds);

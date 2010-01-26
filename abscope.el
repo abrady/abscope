@@ -7,12 +7,10 @@
 ;; exe todos:
 ;; - unit test everything (wire up ptrhash tests)
 ;; - standardize 0 as success. (e.g. in serialize)
-;; - shrink footprint.
 ;; - add strings.abs : for searching all text strings
 ;; - context should grab entire line.
 ;; - editors/MultiEditTable.h/(209):editors/MultiEditTable.h/(14):struct METable; : misparsed?
 ;; - recursive search/call graph
-;; - faster exe load/load on start
 ;;----------------------------------------
 
 ;;; abscope.el --- functions for interacting with the abscope tags system
