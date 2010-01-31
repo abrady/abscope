@@ -2,7 +2,6 @@
 ;; todos:
 ;; - function params
 ;; - struct members (AC)
-;; - global string pool
 ;;
 ;; exe todos:
 ;; - unit test everything (wire up ptrhash tests)
@@ -442,14 +441,13 @@ Ctxt c"
 *seems* to be more responsive if you do this"
   (with-abscope-buffer
     ;; 
-    (accept-process-output abscope-process 0 100 1)))
+   (tq-process-buffer abscope-tq)
+   (accept-process-output abscope-process 0 100 1)))
 
 (defun abs-proc-wait-until-done ()
-  (with-abscope-buffer
-    (loop for i from 1 to 1000 until abscope-last-output 
-          do (abs-proc-wait-once)
-          )
-    )
+  (loop for i from 1 to 1000 until abscope-last-output 
+		do (abs-proc-wait-once)
+		)
   )
 
 (defun abs-query (type fields tag)
@@ -464,8 +462,8 @@ l.ine: actual text line where the tag was parsed"
 
 	 (if (equal type "") (setq type "a"))
 	 (if (equal tag "") (error "invalid (empty) tag"))	 
-	 
-	 (tq-enqueue abscope-tq (concat "Query " type " " (or fields "t") " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-eval-output) ;; search for (t)ags by default
+	 (setq abscope-last-output nil)
+	 (tq-enqueue abscope-tq (concat "Query " type " " (or fields "t") " " tag " End\n") "^(QUERY_DONE))\n\n" abscope-process 'abscope-proc-print-output) ;; search for (t)ags by default
 	 (abs-proc-wait-until-done)
 	 abscope-last-output
    )
@@ -604,8 +602,9 @@ l.ine: actual text line where the tag was parsed"
       (with-abscope-buffer
         (setq abscope-last-output nil)
         (abs-query-print flags nil tag) ;; this logs the history as well as provides the info
-        (abs-proc-wait-until-done)      (if (not abscope-last-output) 
-                                            (error "no info for type %s" vartype))      
+        (abs-proc-wait-until-done)
+		(if (not abscope-last-output) 
+			(error "no info for type %s" vartype))      
         (setq lis (loop for i in abscope-last-output
                         if (eq (car i) 'LocInfo) collect (cons (cdr (assoc 'Tag (cdr i))) (cdr i))))
 		(or (> (length lis) 0) (error "no locations found for %s" tag))
@@ -886,6 +885,56 @@ l.ine: actual text line where the tag was parsed"
 ;; autocomplete intergration. very handy
 ;; *************************************************************************
 
+(defun c-parse-curfunc ()
+  "try to figure out the name of the function the current point is in"
+  (save-excursion
+	;; match () pairs and find the first one missing a close
+	(let ((closes 0)
+		  func)
+	  (while (and (re-search-backward "\\((\\|)\\)" nil t) (not func))
+		(if (equal ")" (match-string 0))
+			(incf closes)
+		  (progn 
+			(decf closes)
+			(if (< closes 0)
+				(setq func (thing-at-point 'symbol)))
+			)
+		  )
+		)
+	  func)))
+
+(defvar absp-last-match-q nil
+  "the last matched popup query")
+(make-local-variable 'absp-last-match-q)
+
+(defvar absp-last-match-cancelled nil
+  "was the last match C-g'd")
+(make-local-variable 'absp-last-match-cancelled)
+
+
+(defun abs-popupinfo-cb ()
+  "helper function that pops abscope info up about the current context"
+  (interactive)
+  (let
+	  (f q r)
+	(if (and (string-match "c" (file-name-extension (buffer-name)))
+			 (setq f (c-parse-curfunc))
+			 (setq q (abs-query "f" nil (concat "\\b" f "\\b")))
+			 )
+		(if (and (equal q absp-last-match-q) absp-last-match-cancelled)
+			nil 		  ;; if we've done this query before and it was cancelled
+		  (progn 
+			(setq absp-last-match-cancelled nil)
+			(setq r (cdr (assoc 'Line (car q))))
+			(if r
+				(popupinfo r)
+			  )
+			) 
+		  )
+	  )
+	)
+  )
+
 (defun abscope-autocomplete-candidate-words ()
   "helper for auto-completing a word"
   (cond 
@@ -905,14 +954,24 @@ l.ine: actual text line where the tag was parsed"
 		 (ac-candidate-words-in-buffer))
 	  ))
    ))
+
+(defun abscope-autocomplete-docs (buf)
+  "If I ever do anything here: staying on a single auto-complete item for a period of time will pop this up. so... put something useful here per function/struct/etc."
+  "")
    
 
-(defvar abscope-autocomplete-sources '((candidates . abscope-autocomplete-candidate-words)))
+(defvar abscope-autocomplete-sources '((candidates . abscope-autocomplete-candidate-words)
+									   (document . abscope-autocomplete-docs)))
 
 (defun abscope-autocomplete-init ()
   (interactive)
   "set up the auto complete variables"
   (setq ac-sources '(
 					 abscope-autocomplete-sources
-					 )))
+					 ))
+  (add-hook 'post-command-hook 'abs-popupinfo-cb nil t)
+;;  (remove-hook 'post-command-hook 'abs-popupinfo-cb)
+  )
+
 (provide 'abscope)
+

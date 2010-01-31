@@ -34,7 +34,7 @@ void c_parse_init(CParse *cp)
 	int i;
 	if(!cp)
 		return;
-	
+
 	cp->pool =  STRUCT_ALLOC(*cp->pool);
 	for(i = 0; i < DIMOF(cp->parses); ++i)
 		cp->parses[i].pool = cp->pool;
@@ -343,17 +343,18 @@ int c_parse_load(CParse *cp)
 	c_load_projfile(cp);	
 
 	if(0 != strpool_read(".abs/strpool.abs",pool,&ctxt))
-		return -1;
+		return -1; 
 
-#define READ_PARSE(P)										\
-	{																\
-		if(g_verbose) printf("reading " #P);							\
-		if(0 != parse_fileread(".abs/c_" #P ".abs",&cp-> P, &ctxt))		\
+
+#define READ_PARSE(P)													\
 		{																\
-			printf(".abs/c_" #P ".abs read FAILED");					\
-			res = -1;													\
-		}																\
-		if(g_verbose) printf(" %i locs\n",cp->P.n_locs);				\
+			if(g_verbose) printf("reading " #P);						\
+			if(file_exists(".abs/c_" #P ".abs") && 0 != parse_fileread(".abs/c_" #P ".abs",&cp-> P, &ctxt))	\
+			{															\
+				printf(".abs/c_" #P ".abs read FAILED\n");				\
+				res = -1;												\
+			}															\
+			if(g_verbose) printf(" %i locs\n",cp->P.n_locs);			\
 	}
 
 	READ_PARSE(structs);
@@ -859,7 +860,8 @@ static int parse_expr(CParse *p, char *ctxt, int terminating_tok, int terminatin
     
     for(;;)
     {
-        NEXT_TOK();        
+        NEXT_TOK();
+		top->
         if(top->tok==terminating_tok || top->tok == terminating_tok2)
         {
             res = top->tok;
@@ -2199,4 +2201,14 @@ void c_parse_cleanup(CParse *p)
 	parse_cleanup(&p->srcfiles);
 	parse_cleanup(&p->cryptic);
 }
+
+
+
+
+
+
+
+
+
+
 
