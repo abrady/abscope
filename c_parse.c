@@ -861,7 +861,7 @@ static int parse_expr(CParse *p, char *ctxt, int terminating_tok, int terminatin
     for(;;)
     {
         NEXT_TOK();
-		top->
+
         if(top->tok==terminating_tok || top->tok == terminating_tok2)
         {
             res = top->tok;
