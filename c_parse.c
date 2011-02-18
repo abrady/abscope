@@ -7,7 +7,10 @@
  * - build a call tree
  * - logging
  * - parse 0xabcd as a numeric constant
- * 
+ * failing:
+ * - MasterControlProgram/MCP_ControllerTracker.c/(245):bool UpdateControllerTrackerConnection(ControllerTrackerConnectionStatusStruct *pStatus, char **ppResultEString)
+ * -   bool operator==(const soap_multipart_iterator& iter) const { return content == iter.content; }
+ *
  * performance: 
  * - writing out file top offender
  * -- fwrite_nolock 18%
@@ -565,11 +568,17 @@ typedef enum c_tokentype
     AUTO_CMD_STRING, // (var,cmd_name)
     AUTO_CMD_SENTENCE,
     AUTO_EXPR_FUNC,  // (UIGen) ACMD_NAME(foo)
+	AUTO_RUN,
+	AUTO_RUN_ANON,
     AUTO_STARTUP,
     NOCONST_DECL,
     ACMD_NAME,       // (foo)
-
     AUTO_ENUM,
+
+	// gluax.h
+	GLUA_FUNC,  // GLUA_FUNC(foo) {
+//	GLUA_END,   // } GLUA_END *ignored*
+
     EIGNORE,
 } c_tokentype;
 #define C_KWS_START TYPEDEF
@@ -591,7 +600,9 @@ typedef enum c_tokentype
     }                                                                   \
     top = get_tok(p);                                                   \
     if(!top->tok)                                                       \
-        break;
+        break;															\
+	if(g_verbose)														\
+		printf("TOK %s",top->tok_str);
 
 
 
@@ -608,6 +619,7 @@ typedef struct StackElt
         } strs;
         Parse locs;
     } l;
+	char tok_str[32]; // for debugging
     c_tokentype tok;
     int lineno;
 } StackElt;
@@ -1517,6 +1529,7 @@ int c_parse(CParse *p)
             else if(top[-1].tok == ')') // function def
             {
                 int n_parens = 1;
+				char *line = NULL;
 
                 // guess to find function name
                 for(type = top-2;type > p->stack && n_parens;--type)
@@ -1535,7 +1548,21 @@ int c_parse(CParse *p)
                 
                 if(p->stack[0].tok==REDUCED_CRYPTIC_AUTO)
                     c_add_cryptic(p,p->stack+0,s);
-                c_add_funcdef(p,top[-1].lineno,s,p->last_line);
+
+				// dodgy: detect snowplow braces vs. next line
+				if(*p->last_line)
+					line = p->last_line;
+				else
+					line = p->line;
+
+				// special case section
+				if(!*s)
+				{
+					if(top[-3].tok == GLUA_FUNC) // func declared: GLUA_FUNC(foo){}
+						s = top[-1].l.str;
+				}
+				
+                c_add_funcdef(p,top[-1].lineno,s,line);
 
                 unget_tok_to(p,0);
                 parse_declspec(p,s,'{',0);
@@ -1578,10 +1605,18 @@ int c_parse(CParse *p)
         case AUTO_EXPR_FUNC:
         case AUTO_STARTUP:
         case AUTO_ENUM:
+		case AUTO_RUN:
+		case AUTO_CMD_SENTENCE:
+		case AUTO_CMD_STRING:
+		case AUTO_CMD_FLOAT:
+		case AUTO_CMD_INT:
             parse_cryptic_auto_decl(p);
             top = get_tok(p);
             reduce_to(p,0,top);
             break;
+		case AUTO_RUN_ANON:
+			parse_to_tok(p,')','('); // parse paren expression
+			break; // TODO: special case
         default:
             break;
         };
@@ -1608,6 +1643,11 @@ static const KwTokPair kws[] =
     { "AUTO_STARTUP",             AUTO_STARTUP },
     { "ACMD_NAME",                ACMD_NAME },
     { "AUTO_ENUM",                AUTO_ENUM },
+    { "AUTO_RUN",                 AUTO_RUN },
+    { "AUTO_RUN_ANON",            AUTO_RUN_ANON },
+
+	{ "GLUA_FUNC",                GLUA_FUNC },
+
     { "typedef",                  TYPEDEF },
     { "extern",                   EXTERN },
     { "static",                   STATIC },
@@ -1676,6 +1716,7 @@ static char const *ignored_kws[] =
     "const",
     "volatile",
     "EIGNORE",
+	"GLUA_END"
 };
 
 
@@ -1697,9 +1738,10 @@ int c_lex(CParse *p, StackElt *top)
 
 #define GETC() ((p->line[(p->i_line++)%DIMOF(p->line)] = (char)(c = abgetc(p->fp))),c)
 #define UNGETC() (p->i_line--,abungetc(c, p->fp)) 
-#define LEX_RET(VAL) { p->lex_timing += timer_diff(timer_start); \
-        p->line[(p->i_line)%DIMOF(p->line)] = 0;           \
-        return VAL;                                                 \
+#define LEX_RET(VAL) { p->lex_timing += timer_diff(timer_start);	\
+	p->line[(p->i_line)%DIMOF(p->line)] = 0;						\ 
+	stracpy(top->tok_str,tok);					\
+	return VAL;									\
     }
 
     if(!tok_from_kw.elts)
@@ -1726,6 +1768,13 @@ yylex_start:
             strcpy(p->last_line,p->line);
             p->parse_line++;
             newline = 1;
+			{
+				static char bp_fn[256] = "./Core/MasterControlProgram/MCP_ControllerTracker.c";
+				static int bp_ln = 241;
+				if(0==strcmp(bp_fn,p->parse_file) && bp_ln == p->parse_line)
+					break_if_debugging();
+			}
+			
         }
     }
     top->lineno = p->parse_line;

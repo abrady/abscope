@@ -7,6 +7,8 @@
  * Todos:
  * - sort locinfos
  * - fixup of refs is slowest part of load. save those
+ * - when things don't parse it is hard to know why. add some code to help this.
+ *   i.e. combattracker_CombatLog didn't parse, why?
  ***************************************************************************/
 #include "abutil.h"
 #include "process.h" // _beginthread

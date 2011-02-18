@@ -967,6 +967,7 @@ l.ine: actual text line where the tag was parsed"
   (interactive)
   "set up the auto complete variables"
   (setq ac-sources '(
+					 ac-source-words-in-same-mode-buffers
 					 abscope-autocomplete-sources
 					 ))
   (add-hook 'post-command-hook 'abs-popupinfo-cb nil t)
@@ -975,3 +976,4 @@ l.ine: actual text line where the tag was parsed"
 
 (provide 'abscope)
 
+;; abscope-find-members : currently the thing to use to autocomplete struct members
